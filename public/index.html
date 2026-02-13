@@ -200,6 +200,8 @@
             font-size: 12px;
             color: #666;
             margin-bottom: 6px;
+            min-height: 2.4em;
+            line-height: 1.2;
         }
 
         .kpi-value {
@@ -785,27 +787,27 @@
                     <div class="kpi-grid">
                         <div class="kpi-card">
                             <div class="kpi-label">Avg Daily Transactions</div>
-                            <div class="kpi-value">1,142</div>
-                            <div class="kpi-trend up">↑ +6.3% vs last mo.</div>
-                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 18 L20 14 L40 16 L60 8 L80 12" /></svg>
+                            <div class="kpi-value" id="kpiAvgDailyValue">1,142</div>
+                            <div class="kpi-trend up" id="kpiAvgDailyTrend">↑ +6.3% vs last mo.</div>
+                            <svg class="kpi-spark" id="kpiAvgDailySpark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 18 L20 14 L40 16 L60 8 L80 12" /></svg>
                         </div>
                         <div class="kpi-card">
-                            <div class="kpi-label">Operator Satisfaction</div>
+                            <div class="kpi-label">Customer Satisfaction</div>
                             <div class="kpi-value">4.32 / 5.0</div>
                             <div class="kpi-trend up">↑ +0.14 vs last mo.</div>
                             <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 20 L20 18 L40 12 L60 10 L80 6" /></svg>
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label">Speed of Service</div>
-                            <div class="kpi-value">3:42 avg</div>
-                            <div class="kpi-trend up">↑ -8s vs last mo.</div>
-                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 8 L20 10 L40 12 L60 14 L80 16" /></svg>
+                            <div class="kpi-value" id="kpiSpeedOfServiceValue">3:42 avg</div>
+                            <div class="kpi-trend up" id="kpiSpeedOfServiceTrend">↑ -8s vs last mo.</div>
+                            <svg class="kpi-spark" id="kpiSpeedOfServiceSpark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 8 L20 10 L40 12 L60 14 L80 16" /></svg>
                         </div>
                         <div class="kpi-card">
-                            <div class="kpi-label">Guest Satisfaction</div>
-                            <div class="kpi-value">92.1%</div>
-                            <div class="kpi-trend down">↓ -0.4% vs last mo.</div>
-                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#c62828" stroke-width="1.5"><path d="M0 6 L20 8 L40 10 L60 14 L80 18" /></svg>
+                            <div class="kpi-label">AOV</div>
+                            <div class="kpi-value" id="kpiAovValue">—</div>
+                            <div class="kpi-trend up" id="kpiAovTrend">vs last mo.</div>
+                            <svg class="kpi-spark" id="kpiAovSpark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 6 L20 8 L40 10 L60 14 L80 18" /></svg>
                         </div>
                     </div>
 
@@ -916,6 +918,163 @@
         updateStatusTimeAndGreeting();
         setInterval(updateStatusTimeAndGreeting, 60000); // update every minute
 
+        async function loadAvgDailyTransactionsKpi() {
+            const valueEl = document.getElementById('kpiAvgDailyValue');
+            const trendEl = document.getElementById('kpiAvgDailyTrend');
+            if (!valueEl || !trendEl) return;
+            valueEl.textContent = 'Loading…';
+            trendEl.textContent = '';
+            try {
+                const res = await fetch('/api/kpis/avg-daily-transactions');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    valueEl.textContent = '—';
+                    valueEl.title = data.error || res.statusText || 'KPI unavailable';
+                    trendEl.textContent = 'Check console / Omni config';
+                    trendEl.className = 'kpi-trend down';
+                    console.warn('KPI avg daily transactions:', data.error || res.statusText, data);
+                    return;
+                }
+                valueEl.title = '';
+                valueEl.textContent = data.valueFormatted != null ? data.valueFormatted : String(data.value ?? '—');
+                if (data.trendFormatted != null) {
+                    const isUp = data.thisMonthTotal >= (data.lastMonthTotal || 0);
+                    trendEl.textContent = (isUp ? '↑ ' : '↓ ') + data.trendFormatted;
+                    trendEl.className = 'kpi-trend ' + (isUp ? 'up' : 'down');
+                } else {
+                    trendEl.textContent = 'vs last mo.';
+                    trendEl.className = 'kpi-trend up';
+                }
+                // Sparkline from daily values
+                const sparkEl = document.getElementById('kpiAvgDailySpark');
+                if (sparkEl && Array.isArray(data.dailyValues) && data.dailyValues.length > 0) {
+                    const vals = data.dailyValues;
+                    const min = Math.min(...vals);
+                    const max = Math.max(...vals);
+                    const range = max - min || 1;
+                    const w = 80, h = 24;
+                    const pts = vals.map((v, i) => {
+                        const x = vals.length === 1 ? w / 2 : (i / (vals.length - 1)) * w;
+                        const y = h - 4 - ((v - min) / range) * (h - 8);
+                        return `${x} ${y}`;
+                    });
+                    const path = sparkEl.querySelector('path');
+                    if (path) path.setAttribute('d', 'M' + pts.join(' L'));
+                }
+            } catch (e) {
+                valueEl.textContent = '—';
+                valueEl.title = e.message || 'Request failed';
+                trendEl.textContent = 'Network error';
+                trendEl.className = 'kpi-trend down';
+                console.warn('KPI avg daily transactions:', e);
+            }
+        }
+        loadAvgDailyTransactionsKpi();
+
+        async function loadSpeedOfServiceKpi() {
+            const valueEl = document.getElementById('kpiSpeedOfServiceValue');
+            const trendEl = document.getElementById('kpiSpeedOfServiceTrend');
+            if (!valueEl || !trendEl) return;
+            valueEl.textContent = 'Loading…';
+            trendEl.textContent = '';
+            try {
+                const res = await fetch('/api/kpis/speed-of-service');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    valueEl.textContent = '—';
+                    valueEl.title = data.error || res.statusText || 'KPI unavailable';
+                    trendEl.textContent = 'Check console / Omni config';
+                    trendEl.className = 'kpi-trend down';
+                    console.warn('KPI speed of service:', data.error || res.statusText, data);
+                    return;
+                }
+                valueEl.title = '';
+                valueEl.textContent = data.valueFormatted != null ? data.valueFormatted : '—';
+                if (data.trendFormatted != null) {
+                    const isImprovement = data.isImprovement === true;
+                    trendEl.textContent = (isImprovement ? '↑ ' : '↓ ') + data.trendFormatted;
+                    trendEl.className = 'kpi-trend ' + (isImprovement ? 'up' : 'down');
+                } else {
+                    trendEl.textContent = 'vs last mo.';
+                    trendEl.className = 'kpi-trend up';
+                }
+                const sparkEl = document.getElementById('kpiSpeedOfServiceSpark');
+                if (sparkEl && Array.isArray(data.dailyValues) && data.dailyValues.length > 0) {
+                    const vals = data.dailyValues;
+                    const min = Math.min(...vals);
+                    const max = Math.max(...vals);
+                    const range = max - min || 1;
+                    const w = 80, h = 24;
+                    const pts = vals.map((v, i) => {
+                        const x = vals.length === 1 ? w / 2 : (i / (vals.length - 1)) * w;
+                        const y = h - 4 - ((v - min) / range) * (h - 8);
+                        return `${x} ${y}`;
+                    });
+                    const path = sparkEl.querySelector('path');
+                    if (path) path.setAttribute('d', 'M' + pts.join(' L'));
+                }
+            } catch (e) {
+                valueEl.textContent = '—';
+                valueEl.title = e.message || 'Request failed';
+                trendEl.textContent = 'Network error';
+                trendEl.className = 'kpi-trend down';
+                console.warn('KPI speed of service:', e);
+            }
+        }
+        loadSpeedOfServiceKpi();
+
+        async function loadAovKpi() {
+            const valueEl = document.getElementById('kpiAovValue');
+            const trendEl = document.getElementById('kpiAovTrend');
+            if (!valueEl || !trendEl) return;
+            valueEl.textContent = 'Loading…';
+            trendEl.textContent = '';
+            try {
+                const res = await fetch('/api/kpis/aov');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    valueEl.textContent = '—';
+                    valueEl.title = data.error || res.statusText || 'KPI unavailable';
+                    trendEl.textContent = 'Check console / Omni config';
+                    trendEl.className = 'kpi-trend down';
+                    console.warn('KPI AOV:', data.error || res.statusText, data);
+                    return;
+                }
+                valueEl.title = '';
+                valueEl.textContent = data.valueFormatted != null ? data.valueFormatted : '—';
+                if (data.trendFormatted != null) {
+                    const isUp = data.isImprovement === true;
+                    trendEl.textContent = (isUp ? '↑ ' : '↓ ') + data.trendFormatted;
+                    trendEl.className = 'kpi-trend ' + (isUp ? 'up' : 'down');
+                } else {
+                    trendEl.textContent = 'vs last mo.';
+                    trendEl.className = 'kpi-trend up';
+                }
+                const sparkEl = document.getElementById('kpiAovSpark');
+                if (sparkEl && Array.isArray(data.dailyValues) && data.dailyValues.length > 0) {
+                    const vals = data.dailyValues;
+                    const min = Math.min(...vals);
+                    const max = Math.max(...vals);
+                    const range = max - min || 1;
+                    const w = 80, h = 24;
+                    const pts = vals.map((v, i) => {
+                        const x = vals.length === 1 ? w / 2 : (i / (vals.length - 1)) * w;
+                        const y = h - 4 - ((v - min) / range) * (h - 8);
+                        return `${x} ${y}`;
+                    });
+                    const path = sparkEl.querySelector('path');
+                    if (path) path.setAttribute('d', 'M' + pts.join(' L'));
+                }
+            } catch (e) {
+                valueEl.textContent = '—';
+                valueEl.title = e.message || 'Request failed';
+                trendEl.textContent = 'Network error';
+                trendEl.className = 'kpi-trend down';
+                console.warn('KPI AOV:', e);
+            }
+        }
+        loadAovKpi();
+
         // Keep Omni and Gemini conversation IDs separate.
         let geminiConversationId = null;
         let omniConversationId = null;
@@ -988,6 +1147,11 @@
                 document.getElementById(target).classList.add('active');
                 if (target === 'ask-pulse' && chatContainer.children.length > 0) {
                     askPulseEmpty.style.display = 'none';
+                }
+                if (target === 'overview') {
+                    loadAvgDailyTransactionsKpi();
+                    loadSpeedOfServiceKpi();
+                    loadAovKpi();
                 }
             });
         });

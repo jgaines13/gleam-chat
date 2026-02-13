@@ -227,8 +227,80 @@ function requireConfig(req, res, next) {
   next();
 }
 
-// Paths are relative to OMNI_BASE_URL (e.g. https://omni.demo.exploreomni.dev/api)
+// Paths are relative to OMNI_BASE_URL (e.g. https://partners.omniapp.co/api)
 const OMNI_API_PREFIX = '/v1/agentic';
+const OMNI_QUERY_PREFIX = '/v1/query';
+
+/** Call Omni Queries API (run query, wait for results). Uses resultType: 'json' for easier parsing. */
+async function omniQueryRun(query, options = {}) {
+  const url = `${OMNI_BASE_URL}${OMNI_QUERY_PREFIX}/run`;
+  const body = {
+    query: typeof query === 'object' && query !== null ? query : null,
+    resultType: 'json',
+    ...options.body,
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OMNI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+
+  if (res.status === 408 && data?.remaining_job_ids?.length) {
+    const maxWait = 120000; // 2 min
+    const step = 2000;
+    const end = Date.now() + maxWait;
+    let jobIds = data.remaining_job_ids;
+    while (Date.now() < end) {
+      await new Promise((r) => setTimeout(r, step));
+      const waitUrl = `${OMNI_BASE_URL}${OMNI_QUERY_PREFIX}/wait`;
+      const waitRes = await fetch(waitUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OMNI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ job_ids: jobIds }),
+      });
+      const waitText = await waitRes.text();
+      let waitData;
+      try {
+        waitData = waitText ? JSON.parse(waitText) : null;
+      } catch {
+        waitData = null;
+      }
+      if (!waitRes.ok) {
+        const err = new Error(waitData?.detail || waitData?.message || waitRes.statusText);
+        err.status = waitRes.status;
+        err.body = waitData;
+        throw err;
+      }
+      if (waitData?.timed_out === false && waitData?.result != null) {
+        return waitData;
+      }
+      if (Array.isArray(waitData?.remaining_job_ids)) jobIds = waitData.remaining_job_ids;
+    }
+    throw new Error('Query wait timed out');
+  }
+
+  if (!res.ok) {
+    const msg = data?.detail || data?.message || data?.error || text || res.statusText;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
 
 async function omniFetch(pathname, options = {}) {
   const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
@@ -392,6 +464,525 @@ async function runOmniAnalysis(prompt, opts = {}) {
   onEvent?.({ type: 'omni_timeout', jobId });
   throw new Error('Omni job timed out');
 }
+
+// --- KPI: Avg Daily Transactions (Omni run-query) ---
+const AVG_DAILY_TRANSACTIONS_QUERY = {
+  limit: 1000,
+  sorts: [{ column_name: 'order_items.created_at[date]', sort_descending: false }],
+  table: 'order_items',
+  fields: [
+    'order_items.created_at[date]',
+    'omni_period_pivot',
+    'order_items.total_orders',
+  ],
+  pivots: ['omni_period_pivot'],
+  dbtMode: false,
+  filters: {
+    'order_items.created_at': {
+      isFiscal: false,
+      is_negative: false,
+      kind: 'BETWEEN',
+      left_side: 'this month',
+      right_side: 'today',
+      type: 'date',
+      ui_type: 'BETWEEN',
+      offset_interval_string: null,
+    },
+    'order_items.status': {
+      kind: 'EQUALS',
+      type: 'string',
+      values: ['Returned', 'Cancelled'],
+      is_negative: true,
+    },
+  },
+  modelId: 'edcfa923-6a47-43a0-9873-ee42624c5d04',
+  version: 8,
+  rewriteSql: true,
+  row_totals: {},
+  fill_fields: [],
+  calculations: [],
+  column_limit: 50,
+  join_via_map: {},
+  column_totals: { '::total::': { type: 'aggregation' } },
+  userEditedSQL: '',
+  dimensionIndex: 2,
+  default_group_by: true,
+  custom_summary_types: {},
+  join_paths_from_topic_name: 'order_items',
+  period_over_period_computations: [
+    { date_filter_field_name: 'order_items.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+  ],
+};
+
+// --- KPI: Speed of Service (time to ship average) ---
+const SPEED_OF_SERVICE_QUERY = {
+  column_limit: 50,
+  dbtMode: false,
+  limit: 1000,
+  modelId: 'edcfa923-6a47-43a0-9873-ee42624c5d04',
+  rewriteSql: true,
+  default_group_by: true,
+  userEditedSQL: '',
+  calculations: [],
+  column_totals: { '::total::': { type: 'aggregation' } },
+  custom_summary_types: {},
+  dimensionIndex: 2,
+  fields: [
+    'order_items.created_at[date]',
+    'omni_period_pivot',
+    'order_items.time_to_ship_average',
+  ],
+  fill_fields: [],
+  filters: {
+    'order_items.created_at': {
+      isFiscal: false,
+      is_negative: false,
+      kind: 'BETWEEN',
+      left_side: 'this month',
+      type: 'date',
+      ui_type: 'BETWEEN',
+      offset_interval_string: null,
+      right_side: 'today',
+    },
+    'order_items.status': {
+      type: 'string',
+      kind: 'EQUALS',
+      values: ['Returned', 'Cancelled'],
+      is_negative: true,
+    },
+  },
+  join_via_map: {},
+  pivots: ['omni_period_pivot'],
+  row_totals: {},
+  sorts: [{ column_name: 'order_items.created_at[date]', sort_descending: false }],
+  table: 'order_items',
+  version: 8,
+  join_paths_from_topic_name: 'order_items',
+  period_over_period_computations: [
+    { date_filter_field_name: 'order_items.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+  ],
+};
+
+/** Parse numeric value (Omni time-to-ship is in days) */
+function parseDays(val) {
+  if (val == null) return NaN;
+  const n = typeof val === 'number' ? val : parseFloat(String(val).trim());
+  return Number.isNaN(n) ? NaN : n;
+}
+
+function parseSpeedOfServiceFromResult(data) {
+  let raw = data?.result ?? data;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  let rows = Array.isArray(raw) ? raw : (raw?.rows || raw?.data || []);
+  if (!Array.isArray(rows) && raw && typeof raw === 'object') {
+    const nested = raw.result || raw.data || raw.rows;
+    rows = Array.isArray(nested) ? nested : [];
+  }
+  const columns = raw?.columns;
+  if (Array.isArray(columns) && columns.length && Array.isArray(rows) && rows.length && typeof rows[0] !== 'object') {
+    rows = rows.map((arr) => {
+      const obj = {};
+      const colNames = columns.map((c) => (typeof c === 'string' ? c : c?.name ?? c?.id ?? ''));
+      colNames.forEach((col, i) => { if (col) obj[col] = arr[i]; });
+      return obj;
+    });
+  }
+  if (!rows.length) return null;
+
+  const first = rows[0];
+  if (typeof first !== 'object' || first === null) return null;
+
+  const keys = Object.keys(first);
+  // Match Omni column names: "Current Period", "Time to Ship Average", "Time To Ship Average", etc.
+  const currentKey = keys.find((k) => /current period|time_to_ship|time to ship|ship average/i.test(k));
+  const previousKey = keys.find((k) => /previous month|previous period/i.test(k));
+  const periodKey = keys.find((k) => /^period$/i.test(k) || /pivot|omni_period/i.test(k));
+
+  if (!currentKey) return null;
+
+  const dataRows = rows.filter((row) => {
+    const periodVal = periodKey ? row[periodKey] : '';
+    const currentVal = row[currentKey];
+    if (typeof currentVal === 'string' && /created at date|total orders/i.test(currentVal)) return false;
+    if (typeof periodVal === 'string' && /created at date|total orders/i.test(periodVal.toLowerCase())) return false;
+    return true;
+  });
+
+  const dailyRows = dataRows.filter((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const days = parseDays(row[currentKey]);
+    return p !== '' && !Number.isNaN(days) && days >= 0;
+  });
+  const dailyValues = dailyRows.map((row) => parseDays(row[currentKey]));
+
+  const summaryRow = dataRows.find((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const days = parseDays(row[currentKey]);
+    return p === '' && !Number.isNaN(days) && days >= 0;
+  });
+
+  let thisPeriodDays = 0;
+  let previousPeriodDays = 0;
+  if (summaryRow) {
+    thisPeriodDays = parseDays(summaryRow[currentKey]);
+    previousPeriodDays = previousKey != null ? parseDays(summaryRow[previousKey]) : 0;
+  } else {
+    for (const row of dataRows) {
+      const days = parseDays(row[currentKey]);
+      if (Number.isNaN(days)) continue;
+      const period = (periodKey ? row[periodKey] : '').toString().toLowerCase();
+      if (period.includes('last') || period.includes('previous') || period.includes('prior')) {
+        previousPeriodDays += days;
+      } else {
+        thisPeriodDays += days;
+      }
+    }
+    if (dataRows.length === 1) thisPeriodDays = parseDays(dataRows[0][currentKey]) || 0;
+  }
+
+  const valueFormatted = thisPeriodDays < 1
+    ? `${(thisPeriodDays * 24).toFixed(1)} hrs avg`
+    : `${Number(thisPeriodDays.toFixed(1))} days avg`;
+  const diffDays = previousPeriodDays > 0 ? thisPeriodDays - previousPeriodDays : 0;
+  let trendFormatted = null;
+  if (previousPeriodDays > 0) {
+    const sign = diffDays <= 0 ? '' : '+';
+    const abs = Math.abs(diffDays);
+    const trendStr = abs < 1 ? `${(abs * 24).toFixed(0)}h` : `${abs.toFixed(1)} days`;
+    trendFormatted = `${sign}${trendStr} vs last mo.`;
+  }
+
+  return {
+    valueFormatted,
+    valueDays: thisPeriodDays,
+    thisPeriodDays,
+    previousPeriodDays,
+    trendFormatted,
+    dailyValues,
+    isImprovement: diffDays <= 0,
+  };
+}
+
+// --- KPI: AOV (average sale price) ---
+const AOV_QUERY = {
+  column_limit: 50,
+  dbtMode: false,
+  limit: 1000,
+  modelId: 'edcfa923-6a47-43a0-9873-ee42624c5d04',
+  rewriteSql: true,
+  default_group_by: true,
+  userEditedSQL: '',
+  calculations: [],
+  column_totals: {},
+  custom_summary_types: {},
+  dimensionIndex: 2,
+  fields: [
+    'order_items.created_at[date]',
+    'omni_period_pivot',
+    'order_items.average_sale_price',
+  ],
+  fill_fields: [],
+  filters: {
+    'order_items.created_at': {
+      isFiscal: false,
+      is_negative: false,
+      kind: 'BETWEEN',
+      left_side: 'this month',
+      type: 'date',
+      ui_type: 'BETWEEN',
+      offset_interval_string: null,
+      right_side: 'today',
+    },
+    'order_items.status': {
+      type: 'string',
+      kind: 'EQUALS',
+      values: ['Returned', 'Cancelled'],
+      is_negative: true,
+    },
+  },
+  join_via_map: {},
+  pivots: ['omni_period_pivot'],
+  row_totals: {},
+  sorts: [{ column_name: 'order_items.created_at[date]', sort_descending: false }],
+  table: 'order_items',
+  version: 8,
+  join_paths_from_topic_name: 'order_items',
+  period_over_period_computations: [
+    { date_filter_field_name: 'order_items.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+  ],
+};
+
+function parseAovFromResult(data) {
+  let raw = data?.result ?? data;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  let rows = Array.isArray(raw) ? raw : (raw?.rows || raw?.data || []);
+  if (!Array.isArray(rows) && raw && typeof raw === 'object') {
+    const nested = raw.result || raw.data || raw.rows;
+    rows = Array.isArray(nested) ? nested : [];
+  }
+  const columns = raw?.columns;
+  if (Array.isArray(columns) && columns.length && Array.isArray(rows) && rows.length && typeof rows[0] !== 'object') {
+    rows = rows.map((arr) => {
+      const obj = {};
+      const colNames = columns.map((c) => (typeof c === 'string' ? c : c?.name ?? c?.id ?? ''));
+      colNames.forEach((col, i) => { if (col) obj[col] = arr[i]; });
+      return obj;
+    });
+  }
+  if (!rows.length) return null;
+
+  const first = rows[0];
+  if (typeof first !== 'object' || first === null) return null;
+
+  const keys = Object.keys(first);
+  const currentKey = keys.find((k) => /current period|average_sale_price|average sale price/i.test(k));
+  const previousKey = keys.find((k) => /previous month|previous period/i.test(k));
+  const periodKey = keys.find((k) => /^period$/i.test(k) || /pivot|omni_period/i.test(k));
+
+  if (!currentKey) return null;
+
+  const dataRows = rows.filter((row) => {
+    const periodVal = periodKey ? row[periodKey] : '';
+    const currentVal = row[currentKey];
+    if (typeof currentVal === 'string' && /created at date|total orders/i.test(currentVal)) return false;
+    if (typeof periodVal === 'string' && /created at date|total orders/i.test(periodVal.toLowerCase())) return false;
+    return true;
+  });
+
+  const dailyRows = dataRows.filter((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const n = Number(row[currentKey]);
+    return p !== '' && !Number.isNaN(n) && n >= 0;
+  });
+  const dailyValues = dailyRows.map((row) => Number(row[currentKey]));
+
+  const summaryRow = dataRows.find((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const c = Number(row[currentKey]);
+    return p === '' && !Number.isNaN(c) && c >= 0;
+  });
+
+  let thisPeriod = 0;
+  let previousPeriod = 0;
+  if (summaryRow) {
+    thisPeriod = Number(summaryRow[currentKey]) || 0;
+    previousPeriod = previousKey != null ? Number(summaryRow[previousKey]) || 0 : 0;
+  } else {
+    for (const row of dataRows) {
+      const val = Number(row[currentKey]);
+      if (Number.isNaN(val)) continue;
+      const period = (periodKey ? row[periodKey] : '').toString().toLowerCase();
+      if (period.includes('last') || period.includes('previous') || period.includes('prior')) {
+        previousPeriod += val;
+      } else {
+        thisPeriod += val;
+      }
+    }
+    if (dataRows.length === 1) thisPeriod = Number(dataRows[0][currentKey]) || 0;
+  }
+
+  const valueFormatted = typeof thisPeriod === 'number' && !Number.isNaN(thisPeriod)
+    ? `$${thisPeriod.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : '—';
+  const pctChange = previousPeriod > 0
+    ? ((thisPeriod - previousPeriod) / previousPeriod) * 100
+    : 0;
+  const sign = pctChange >= 0 ? '+' : '';
+  const trendFormatted = previousPeriod > 0 ? `${sign}${pctChange.toFixed(1)}% vs last mo.` : null;
+
+  return {
+    valueFormatted,
+    value: thisPeriod,
+    thisPeriod,
+    previousPeriod,
+    trendFormatted,
+    dailyValues,
+    isImprovement: thisPeriod >= previousPeriod,
+  };
+}
+
+function parseAvgDailyTransactionsFromResult(data) {
+  let raw = data?.result ?? data;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  let rows = Array.isArray(raw) ? raw : (raw?.rows ? raw.rows : raw?.data ? raw.data : []);
+  const columns = raw?.columns;
+  // If result is { columns: [...], rows: [[...], ...] }, convert to array of objects
+  if (Array.isArray(columns) && columns.length && Array.isArray(rows) && rows.length && typeof rows[0] !== 'object') {
+    rows = rows.map((arr) => {
+      const obj = {};
+      const colNames = columns.map((c) => (typeof c === 'string' ? c : c?.name ?? c?.id ?? ''));
+      colNames.forEach((col, i) => { if (col) obj[col] = arr[i]; });
+      return obj;
+    });
+  }
+  if (!rows.length) return null;
+
+  const first = rows[0];
+  if (typeof first !== 'object' || first === null) return null;
+
+  // Omni JSON can return "Period", "Current Period", "Previous Month" (or similar)
+  const currentKey = Object.keys(first).find((k) => /current period|total_orders|total orders/i.test(k));
+  const previousKey = Object.keys(first).find((k) => /previous month|previous period/i.test(k));
+  const periodKey = Object.keys(first).find((k) => /^period$/i.test(k) || /pivot|omni_period/i.test(k));
+
+  if (!currentKey) return null;
+
+  // Skip header row (e.g. Period: 'Created At Date', Current Period: 'Total Orders')
+  const dataRows = rows.filter((row) => {
+    const periodVal = periodKey ? row[periodKey] : '';
+    const currentVal = row[currentKey];
+    if (typeof currentVal === 'string' && /total orders|created at/i.test(currentVal)) return false;
+    if (typeof periodVal === 'string' && /created at date|total orders/i.test(periodVal.toLowerCase())) return false;
+    return true;
+  });
+
+  let thisMonthTotal = 0;
+  let lastMonthTotal = 0;
+
+  // Prefer summary row: empty Period and numeric Current Period / Previous Month (last row often)
+  const summaryRow = dataRows.find((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const c = Number(row[currentKey]);
+    const prev = previousKey != null ? Number(row[previousKey]) : NaN;
+    return p === '' && !Number.isNaN(c) && c > 0;
+  });
+
+  // Daily rows for sparkline: exclude header and summary (empty Period)
+  const dailyRows = dataRows.filter((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const c = Number(row[currentKey]);
+    return p !== '' && !Number.isNaN(c);
+  });
+  const dailyValues = dailyRows.map((row) => Number(row[currentKey]));
+
+  if (summaryRow) {
+    thisMonthTotal = Number(summaryRow[currentKey]) || 0;
+    lastMonthTotal = previousKey != null ? Number(summaryRow[previousKey]) || 0 : 0;
+  } else {
+    // Sum by period: rows with "previous" in period label -> last month, else current
+    for (const row of dataRows) {
+      const currentVal = Number(row[currentKey]);
+      if (Number.isNaN(currentVal)) continue;
+      const period = (periodKey ? row[periodKey] : '').toString().toLowerCase();
+      if (period.includes('last') || period.includes('previous') || period.includes('prior')) {
+        lastMonthTotal += currentVal;
+      } else {
+        thisMonthTotal += currentVal;
+      }
+    }
+    if (dataRows.length === 1) thisMonthTotal = Number(dataRows[0][currentKey]) || 0;
+  }
+
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayOfMonth = now.getDate();
+  const daysSoFar = Math.min(dayOfMonth, daysInMonth);
+  const avgDaily = daysSoFar > 0 ? Math.round(thisMonthTotal / daysSoFar) : thisMonthTotal;
+
+  let trendFormatted = null;
+  if (lastMonthTotal > 0 && thisMonthTotal != null) {
+    const pct = (((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100);
+    const sign = pct >= 0 ? '+' : '';
+    trendFormatted = `${sign}${pct.toFixed(1)}% vs last mo.`;
+  }
+
+  return {
+    value: avgDaily,
+    valueFormatted: avgDaily.toLocaleString(),
+    thisMonthTotal,
+    lastMonthTotal,
+    trendFormatted,
+    dailyValues,
+  };
+}
+
+app.get('/api/kpis/avg-daily-transactions', requireConfig, async (req, res) => {
+  try {
+    const data = await omniQueryRun(AVG_DAILY_TRANSACTIONS_QUERY);
+    const parsed = parseAvgDailyTransactionsFromResult(data);
+    if (!parsed) {
+      return res.status(502).json({
+        error: 'Could not parse KPI from Omni result',
+        raw: data?.result != null ? { hasResult: true, rowCount: Array.isArray(data.result) ? data.result.length : 'n/a' } : data,
+      });
+    }
+    res.json(parsed);
+  } catch (err) {
+    const status = err.status || 500;
+    const message = err.message || 'Failed to load avg daily transactions';
+    res.status(status).json({
+      error: message,
+      details: err.body,
+    });
+  }
+});
+
+app.get('/api/kpis/speed-of-service', requireConfig, async (req, res) => {
+  try {
+    const data = await omniQueryRun(SPEED_OF_SERVICE_QUERY);
+    const parsed = parseSpeedOfServiceFromResult(data);
+    if (!parsed) {
+      const raw = data?.result ?? data;
+      const rows = Array.isArray(raw) ? raw : (raw?.rows || raw?.data || []);
+      const firstRow = rows[0];
+      const sampleKeys = typeof firstRow === 'object' && firstRow !== null ? Object.keys(firstRow) : [];
+      return res.status(502).json({
+        error: 'Could not parse Speed of Service from Omni result',
+        debug: { rowCount: rows.length, firstRowKeys: sampleKeys, firstRowSample: firstRow },
+      });
+    }
+    res.json(parsed);
+  } catch (err) {
+    const status = err.status || 500;
+    const message = err.message || 'Failed to load speed of service';
+    res.status(status).json({
+      error: message,
+      details: err.body,
+    });
+  }
+});
+
+app.get('/api/kpis/aov', requireConfig, async (req, res) => {
+  try {
+    const data = await omniQueryRun(AOV_QUERY);
+    const parsed = parseAovFromResult(data);
+    if (!parsed) {
+      return res.status(502).json({
+        error: 'Could not parse AOV from Omni result',
+        raw: data?.result != null ? { hasResult: true, rowCount: Array.isArray(data.result) ? data.result.length : 'n/a' } : data,
+      });
+    }
+    res.json(parsed);
+  } catch (err) {
+    const status = err.status || 500;
+    const message = err.message || 'Failed to load AOV';
+    res.status(status).json({
+      error: message,
+      details: err.body,
+    });
+  }
+});
 
 // --- Weather tool (external, not Omni) ---
 async function weatherGetForecast(location, opts = {}) {
