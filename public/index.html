@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gleam Pulse — Operators</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #e8e8e8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .phone-container {
+            width: 375px;
+            height: 812px;
+            background: #000;
+            border-radius: 40px;
+            padding: 8px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            background: linear-gradient(180deg, #F8F2F9 0%, #F0E8F2 35%, #E8E0EC 100%);
+            background-color: #E8E0EC;
+            border-radius: 32px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .status-bar {
+            height: 44px;
+            background: transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 24px;
+            color: #000;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .header {
+            padding: 12px 20px 16px;
+            background: transparent;
+            border-bottom: 1px solid rgba(167, 123, 232, 0.15);
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .logo-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gleam-logo {
+            height: 24px;
+            width: auto;
+            flex-shrink: 0;
+            display: block;
+            color: #000;
+        }
+
+        .gleam-logo svg {
+            height: 100%;
+            width: auto;
+            display: block;
+        }
+
+        .brand-font {
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-weight: 800;
+            color: #000;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .app-title {
+            font-size: 20px;
+            letter-spacing: 0.06em;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: #666;
+            margin-left: 32px;
+            margin-top: 6px;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 18px;
+            background: #e3f2fd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #1976d2;
+            font-size: 18px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 6px;
+            padding: 0 20px;
+            margin-top: 10px;
+        }
+
+        .tab {
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b5b73;
+            cursor: pointer;
+            border-radius: 999px;
+            border: 1px solid rgba(167, 123, 232, 0.35);
+            background: transparent;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+
+        .tab:hover {
+            border-color: rgba(167, 123, 232, 0.55);
+            color: #5a5260;
+        }
+
+        .tab.active {
+            background: #A77BE8;
+            color: #fff;
+            border-color: #A77BE8;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            display: none;
+            flex-direction: column;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        /* ——— Overview ——— */
+        .overview-content {
+            padding: 20px;
+        }
+
+        .greeting {
+            font-size: 22px;
+            font-weight: 700;
+            color: #000;
+            margin-bottom: 4px;
+        }
+
+        .greeting-sub {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .kpi-card {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+
+        .kpi-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+
+        .kpi-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #000;
+        }
+
+        .kpi-trend {
+            font-size: 12px;
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .kpi-trend.up {
+            color: #2e7d32;
+        }
+
+        .kpi-trend.down {
+            color: #c62828;
+        }
+
+        .kpi-spark {
+            height: 24px;
+            margin-top: 8px;
+            opacity: 0.8;
+        }
+
+        .alert-card {
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .alert-card.warning {
+            background: linear-gradient(90deg, #E5D9F2 0%, #D4C4E8 50%, #C8B4E6 100%);
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 2px 12px rgba(200, 180, 230, 0.3);
+        }
+
+        .alert-card.warning .alert-title,
+        .alert-card.warning .alert-body,
+        .alert-card.warning .ask-pulse-cta {
+            color: #3d3551;
+        }
+
+        .alert-card.warning .ask-pulse-cta:hover {
+            color: #5a4d6e;
+        }
+
+        .alert-card.success {
+            background: linear-gradient(90deg, #FFF8E7 0%, #FDF0D4 50%, #F5E6C4 100%);
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 2px 12px rgba(220, 200, 140, 0.3);
+        }
+
+        .alert-card.success .alert-title,
+        .alert-card.success .alert-body {
+            color: #4a4230;
+        }
+
+        .alert-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .alert-icon {
+            font-size: 20px;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: #000;
+        }
+
+        .alert-body {
+            font-size: 13px;
+            color: #444;
+            line-height: 1.45;
+            margin-bottom: 12px;
+        }
+
+        .ask-pulse-cta {
+            font-size: 13px;
+            font-weight: 600;
+            color: #A77BE8;
+            cursor: pointer;
+        }
+
+        .ask-pulse-cta:hover {
+            text-decoration: underline;
+        }
+
+        /* ——— Ask Pulse (chat) ——— */
+        .ask-pulse-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px 20px;
+        }
+
+        .ask-pulse-empty {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .ask-pulse-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ask-pulse-icon svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .ask-pulse-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #000;
+            margin-bottom: 8px;
+        }
+
+        .ask-pulse-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 28px;
+            max-width: 280px;
+        }
+
+        .suggested-questions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .suggested-btn {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(167, 123, 232, 0.2);
+            border-radius: 14px;
+            padding: 14px 18px;
+            font-size: 14px;
+            color: #333;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 1px 6px rgba(167, 123, 232, 0.06);
+        }
+
+        .suggested-btn:hover {
+            border-color: #A77BE8;
+            color: #A77BE8;
+            box-shadow: 0 2px 12px rgba(167, 123, 232, 0.15);
+        }
+
+        .suggested-btn:active {
+            background: rgba(167, 123, 232, 0.15);
+            border-color: #A77BE8;
+            color: #A77BE8;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 0 0 16px;
+        }
+
+        .message {
+            display: flex;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 16px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .message.user .message-avatar {
+            background: #A77BE8;
+            color: white;
+        }
+
+        .message.assistant .message-avatar {
+            background: transparent;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .message.assistant .message-avatar svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .message-content {
+            max-width: 82%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: #A77BE8;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: #f5f5f5;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        /* Markdown styling in assistant messages */
+        .message.assistant .message-content p {
+            margin: 0 0 0.6em 0;
+        }
+        .message.assistant .message-content p:last-child {
+            margin-bottom: 0;
+        }
+        .message.assistant .message-content ul,
+        .message.assistant .message-content ol {
+            margin: 0.4em 0;
+            padding-left: 1.25em;
+        }
+        .message.assistant .message-content li {
+            margin: 0.2em 0;
+        }
+        .message.assistant .message-content strong {
+            font-weight: 700;
+        }
+        .message.assistant .message-content em {
+            font-style: italic;
+        }
+        .message.assistant .message-content code {
+            background: rgba(0,0,0,0.06);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.92em;
+        }
+        .message.assistant .message-content pre {
+            margin: 0.5em 0;
+            padding: 10px;
+            background: rgba(0,0,0,0.06);
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .message.assistant .message-content pre code {
+            background: none;
+            padding: 0;
+        }
+        .message.assistant .message-content a {
+            color: #A77BE8;
+            text-decoration: none;
+        }
+        .message.assistant .message-content a:hover {
+            text-decoration: underline;
+        }
+        .message.assistant .message-content h1, .message.assistant .message-content h2, .message.assistant .message-content h3 {
+            margin: 0.75em 0 0.35em 0;
+            font-size: 1em;
+            font-weight: 700;
+        }
+        .message.assistant .message-content h1:first-child, .message.assistant .message-content h2:first-child, .message.assistant .message-content h3:first-child {
+            margin-top: 0;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            background: #f5f5f5;
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: #A77BE8;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        .input-container {
+            padding: 12px 20px 24px;
+            background: transparent;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 14px 18px;
+            border: 1px solid #e0e0e0;
+            border-radius: 24px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fff;
+        }
+
+        .chat-input:focus {
+            border-color: #A77BE8;
+            box-shadow: 0 0 0 2px rgba(167, 123, 232, 0.2);
+        }
+
+        .send-button {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(90deg, #E5D9F2 0%, #D4C4E8 50%, #C8B4E6 100%);
+            border: none;
+            border-radius: 22px;
+            color: #5a4a6a;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .send-button:hover {
+            opacity: 0.9;
+        }
+
+        .send-button.active {
+            background: linear-gradient(90deg, #E5D9F2 0%, #D4C4E8 50%, #C8B4E6 100%);
+            color: #5a4a6a;
+        }
+
+        .error-message {
+            color: #c62828;
+            font-size: 13px;
+            padding: 8px 12px;
+            background: #ffebee;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+
+        /* Debug panel */
+        .debug-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 0 10px;
+        }
+
+        .debug-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        /* Integrations drawer (keeps footer less busy) */
+        .integrations-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 0 6px;
+        }
+
+        .integrations-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .integrations-panel {
+            border: 1px solid #eee;
+            background: #fff;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 8px;
+            display: none;
+        }
+
+        .integrations-panel.open {
+            display: block;
+        }
+
+        .integration-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .integration-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #111;
+        }
+
+        .integration-hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.35;
+        }
+
+        .calendar-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid #e0e0e0;
+            background: #fff;
+            font-size: 12px;
+            color: #444;
+        }
+
+        .calendar-pill .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #bbb;
+        }
+
+        .calendar-pill.connected .dot {
+            background: #2e7d32;
+        }
+
+        .calendar-pill.not-configured .dot {
+            background: #c62828;
+        }
+
+        .debug-toggle {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            padding: 6px 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .debug-toggle:hover {
+            border-color: #A77BE8;
+            color: #A77BE8;
+        }
+
+        .debug-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            user-select: none;
+        }
+
+        .debug-panel {
+            border: 1px solid #eee;
+            background: #fafafa;
+            border-radius: 12px;
+            padding: 10px;
+            max-height: 180px;
+            overflow: auto;
+            display: none;
+        }
+
+        .debug-panel.open {
+            display: block;
+        }
+
+        .debug-item {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #333;
+            padding: 6px 0;
+            border-bottom: 1px dashed #e5e5e5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .debug-item:last-child {
+            border-bottom: none;
+        }
+
+        .debug-meta {
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-container">
+        <div class="phone-screen">
+            <div class="status-bar">
+                <span id="statusTimeGreeting"></span>
+                <span>●●●</span>
+                <span>🔋</span>
+            </div>
+
+            <div class="header">
+                <div class="header-top">
+                    <div class="logo-row">
+                        <span class="gleam-logo" aria-hidden="true">
+                            <svg viewBox="0 0 96 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/>
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#gleam_star_gradient)"/>
+                                <path d="M92.9749 1.76932C93.0545 1.63014 93.1738 1.56055 93.3328 1.56055H95.5996C95.7984 1.56055 95.8978 1.65996 95.8978 1.8588V22.1399C95.8978 22.3388 95.7984 22.4382 95.5996 22.4382H93.3328C93.134 22.4382 93.0346 22.3388 93.0346 22.1399V7.34664C93.0346 7.28699 93.0147 7.25716 92.9749 7.25716C92.9551 7.25716 92.9252 7.27705 92.8855 7.31681L90.0222 12.6555C89.9626 12.7947 89.8731 12.8643 89.7538 12.8643C89.6345 12.8643 89.545 12.7947 89.4854 12.6555L86.652 7.34664C86.6122 7.30687 86.5725 7.28699 86.5327 7.28699C86.5128 7.28699 86.5029 7.31681 86.5029 7.37646V22.1399C86.5029 22.3388 86.4035 22.4382 86.2046 22.4382H83.9379C83.7391 22.4382 83.6396 22.3388 83.6396 22.1399V1.8588C83.6396 1.65996 83.7391 1.56055 83.9379 1.56055H86.2046C86.3438 1.56055 86.4631 1.63014 86.5625 1.76932L89.6942 7.37646C89.7141 7.39635 89.7439 7.40629 89.7836 7.40629C89.8234 7.40629 89.8532 7.39635 89.8731 7.37646L92.9749 1.76932Z" fill="currentColor"/>
+                                <path d="M78.8808 22.4382C78.7018 22.4382 78.5925 22.3487 78.5527 22.1698L77.8966 18.7399C77.8966 18.7001 77.8767 18.6703 77.8369 18.6504C77.817 18.6305 77.7872 18.6206 77.7474 18.6206H72.8859C72.8462 18.6206 72.8064 18.6305 72.7666 18.6504C72.7467 18.6703 72.7368 18.7001 72.7368 18.7399L72.1105 22.1698C72.0906 22.3487 71.9812 22.4382 71.7824 22.4382H69.5157C69.4163 22.4382 69.3367 22.4084 69.2771 22.3487C69.2373 22.2891 69.2274 22.2095 69.2472 22.1101L73.6912 1.82897C73.731 1.65002 73.8403 1.56055 74.0193 1.56055H76.6737C76.8726 1.56055 76.9819 1.65002 77.0018 1.82897L81.4756 22.1101V22.1698C81.4756 22.3487 81.3861 22.4382 81.2072 22.4382H78.8808ZM73.2438 16.2346C73.2438 16.3141 73.2736 16.3539 73.3333 16.3539H77.3001C77.3597 16.3539 77.3895 16.3141 77.3895 16.2346L75.3614 5.6466C75.3415 5.60684 75.3216 5.58695 75.3018 5.58695C75.2819 5.58695 75.262 5.60684 75.2421 5.6466L73.2438 16.2346Z" fill="currentColor"/>
+                                <path d="M67.1858 3.73779C67.1858 3.93662 67.0864 4.03604 66.8875 4.03604H60.1769C60.0973 4.03604 60.0576 4.07581 60.0576 4.15534V10.6274C60.0576 10.7069 60.0973 10.7467 60.1769 10.7467H64.2927C64.4916 10.7467 64.591 10.8461 64.591 11.045V12.924C64.591 13.1228 64.4916 13.2222 64.2927 13.2222H60.1769C60.0973 13.2222 60.0576 13.262 60.0576 13.3415V19.8434C60.0576 19.9229 60.0973 19.9627 60.1769 19.9627H66.8875C67.0864 19.9627 67.1858 20.0621 67.1858 20.261V22.1399C67.1858 22.3388 67.0864 22.4382 66.8875 22.4382H57.4926C57.2938 22.4382 57.1943 22.3388 57.1943 22.1399V1.8588C57.1943 1.65996 57.2938 1.56055 57.4926 1.56055H66.8875C67.0864 1.56055 67.1858 1.65996 67.1858 1.8588V3.73779Z" fill="currentColor"/>
+                                <path d="M45.3471 22.4382C45.1482 22.4382 45.0488 22.3388 45.0488 22.1399V1.8588C45.0488 1.65996 45.1482 1.56055 45.3471 1.56055H47.6138C47.8126 1.56055 47.912 1.65996 47.912 1.8588V19.8434C47.912 19.9229 47.9518 19.9627 48.0314 19.9627H54.7122C54.911 19.9627 55.0105 20.0621 55.0105 20.261V22.1399C55.0105 22.3388 54.911 22.4382 54.7122 22.4382H45.3471Z" fill="currentColor"/>
+                                <path d="M36.3685 22.6771C34.758 22.6771 33.4556 22.1999 32.4614 21.2455C31.4871 20.2911 31 19.0285 31 17.4577V6.54168C31 4.97088 31.4871 3.70828 32.4614 2.75388C33.4556 1.79947 34.758 1.32227 36.3685 1.32227C37.9791 1.32227 39.2815 1.79947 40.2756 2.75388C41.2698 3.70828 41.7669 4.98082 41.7669 6.5715V7.82416C41.7669 8.023 41.6675 8.12241 41.4687 8.12241H39.2019C39.0031 8.12241 38.9037 8.023 38.9037 7.82416V6.51185C38.9037 5.69663 38.6651 5.04047 38.1879 4.54339C37.7306 4.0463 37.1241 3.79776 36.3685 3.79776C35.613 3.79776 34.9966 4.0463 34.5194 4.54339C34.0621 5.04047 33.8334 5.69663 33.8334 6.51185V17.4875C33.8334 18.3028 34.0621 18.9589 34.5194 19.456C34.9966 19.9531 35.613 20.2016 36.3685 20.2016C37.1241 20.2016 37.7306 19.9531 38.1879 19.456C38.6651 18.9589 38.9037 18.3028 38.9037 17.4875V14.2068C38.9037 14.1272 38.8639 14.0875 38.7844 14.0875H36.5177C36.3188 14.0875 36.2194 13.988 36.2194 13.7892V11.94C36.2194 11.7412 36.3188 11.6418 36.5177 11.6418H41.4687C41.6675 11.6418 41.7669 11.7412 41.7669 11.94V17.4577C41.7669 19.0285 41.2698 20.2911 40.2756 21.2455C39.2815 22.1999 37.9791 22.6771 36.3685 22.6771Z" fill="currentColor"/>
+                                <defs><linearGradient id="gleam_star_gradient" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
+                            </svg>
+                        </span>
+                        <span class="brand-font app-title">PULSE</span>
+                    </div>
+                    <div class="user-avatar">👤</div>
+                </div>
+                <div class="header-subtitle">Carhartt · <span id="headerDate"></span></div>
+                <div class="tabs">
+                    <div class="tab active" data-tab="overview">Overview</div>
+                    <div class="tab" data-tab="ask-pulse">Ask Pulse</div>
+                </div>
+            </div>
+
+            <!-- Overview tab -->
+            <div class="tab-content active" id="overview">
+                <div class="overview-content">
+                    <div class="greeting" id="greetingText">Good morning, Jess 👋</div>
+                    <div class="greeting-sub">Here's how your brand is performing.</div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Avg Daily Transactions</div>
+                            <div class="kpi-value">1,142</div>
+                            <div class="kpi-trend up">↑ +6.3% vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 18 L20 14 L40 16 L60 8 L80 12" /></svg>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Operator Satisfaction</div>
+                            <div class="kpi-value">4.32 / 5.0</div>
+                            <div class="kpi-trend up">↑ +0.14 vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 20 L20 18 L40 12 L60 10 L80 6" /></svg>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Speed of Service</div>
+                            <div class="kpi-value">3:42 avg</div>
+                            <div class="kpi-trend up">↑ -8s vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 8 L20 10 L40 12 L60 14 L80 16" /></svg>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Guest Satisfaction</div>
+                            <div class="kpi-value">92.1%</div>
+                            <div class="kpi-trend down">↓ -0.4% vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#c62828" stroke-width="1.5"><path d="M0 6 L20 8 L40 10 L60 14 L80 18" /></svg>
+                        </div>
+                    </div>
+
+                    <div class="alert-card warning">
+                        <div class="alert-header">
+                            <span class="alert-icon">⚠️</span>
+                            <span class="alert-title">Speed of Delivery Alert</span>
+                        </div>
+                        <div class="alert-body">3 locations in Northern Atlanta saw drive-thru times increase 12–31% last week.</div>
+                        <div class="ask-pulse-cta" onclick="switchToAskPulse()">Ask Pulse for details →</div>
+                    </div>
+
+                    <div class="alert-card success">
+                        <div class="alert-header">
+                            <span class="alert-icon">🎉</span>
+                            <span class="alert-title">Buckhead Renovation Impact</span>
+                        </div>
+                        <div class="alert-body">Location #02901 jumped from #8 to #3 in daily transactions since drive-thru renovation completed. Transactions up 31%.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ask Pulse tab -->
+            <div class="tab-content" id="ask-pulse">
+                <div class="ask-pulse-content">
+                    <div class="ask-pulse-empty" id="askPulseEmpty">
+                        <div class="ask-pulse-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/>
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#gleam_star_empty)"/>
+                                <defs><linearGradient id="gleam_star_empty" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
+                            </svg>
+                        </div>
+                        <div class="ask-pulse-title">Ask Pulse</div>
+                        <div class="ask-pulse-subtitle">Ask anything about your locations, performance, and operations.</div>
+                        <div class="suggested-questions">
+                            <button class="suggested-btn" onclick="sendMessage('Seasonality trends in orders?')">Seasonality trends in orders?</button>
+                            <button class="suggested-btn" onclick="sendMessage('Operator satisfaction trend?')">Operator satisfaction trend?</button>
+                            <button class="suggested-btn" onclick="sendMessage('Speed of service drops?')">Speed of service drops?</button>
+                        </div>
+                    </div>
+                    <div class="chat-container" id="chatContainer"></div>
+                    <div class="integrations-controls">
+                        <div class="integrations-left">
+                            <button class="debug-toggle" id="integrationsToggle" type="button">Integrations</button>
+                            <span class="calendar-pill" id="calendarStatus"><span class="dot"></span><span class="label">Calendar</span></span>
+                        </div>
+                    </div>
+                    <div class="integrations-panel" id="integrationsPanel">
+                        <div class="integration-row">
+                            <div class="integration-title">Google Calendar</div>
+                            <a class="debug-toggle" id="calendarConnect" href="/auth/google" target="_blank" rel="noopener">Connect</a>
+                        </div>
+                        <div class="integration-hint">
+                            Connect a test Google account to let Ask Pulse list and create calendar events. To schedule a shift, say who it’s for (e.g. &quot;Schedule a shift for Ben this Saturday 12–5&quot;) and events will be titled &quot;Shift for [name]&quot;.
+                        </div>
+                    </div>
+                    <div class="debug-controls">
+                        <div class="debug-left">
+                            <button class="debug-toggle" id="debugToggle" type="button">Debug</button>
+                            <label class="debug-switch">
+                                <input type="checkbox" id="debugEnabled">
+                                Enable trace
+                            </label>
+                        </div>
+                        <button class="debug-toggle" id="debugClear" type="button">Clear</button>
+                    </div>
+                    <div class="debug-panel" id="debugPanel"></div>
+                    <div class="input-container">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="Ask about your business..." onkeypress="handleKeyPress(event)" oninput="toggleSendButton()">
+                        <button class="send-button" id="sendBtn" onclick="sendMessage()">↑</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const askPulseEmpty = document.getElementById('askPulseEmpty');
+        const debugToggle = document.getElementById('debugToggle');
+        const debugClear = document.getElementById('debugClear');
+        const debugEnabledEl = document.getElementById('debugEnabled');
+        const debugPanel = document.getElementById('debugPanel');
+        const integrationsToggle = document.getElementById('integrationsToggle');
+        const integrationsPanel = document.getElementById('integrationsPanel');
+        const calendarStatus = document.getElementById('calendarStatus');
+        const headerDateEl = document.getElementById('headerDate');
+        if (headerDateEl) headerDateEl.textContent = new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+        function getTimeOfDayGreeting() {
+            const h = new Date().getHours();
+            if (h < 12) return 'Good Morning';
+            if (h < 17) return 'Good Afternoon';
+            return 'Good Evening';
+        }
+        function updateStatusTimeAndGreeting() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const greeting = getTimeOfDayGreeting();
+            const statusEl = document.getElementById('statusTimeGreeting');
+            if (statusEl) statusEl.textContent = timeStr;
+            const greetingEl = document.getElementById('greetingText');
+            if (greetingEl) greetingEl.textContent = greeting + ', Jess 👋';
+        }
+        updateStatusTimeAndGreeting();
+        setInterval(updateStatusTimeAndGreeting, 60000); // update every minute
+
+        // Keep Omni and Gemini conversation IDs separate.
+        let geminiConversationId = null;
+        let omniConversationId = null;
+        let isSending = false;
+        const debugEvents = [];
+
+        function addDebug(event) {
+            const ts = new Date().toISOString();
+            debugEvents.push({ ts, ...event });
+            renderDebug();
+        }
+
+        function renderDebug() {
+            if (!debugPanel) return;
+            debugPanel.innerHTML = debugEvents
+                .slice(-200)
+                .map((e) => {
+                    const { ts, type, ...rest } = e;
+                    let payload = Object.keys(rest).length ? JSON.stringify(rest) : '';
+                    if (payload.length > 2000) payload = payload.slice(0, 2000) + '…(truncated)';
+                    return `<div class="debug-item"><span class="debug-meta">${ts}</span>  <strong>${escapeHtml(String(type || 'event'))}</strong>${payload ? `\n${escapeHtml(payload)}` : ''}</div>`;
+                })
+                .join('');
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+        }
+
+        debugToggle?.addEventListener('click', () => {
+            debugPanel.classList.toggle('open');
+        });
+        debugClear?.addEventListener('click', () => {
+            debugEvents.length = 0;
+            renderDebug();
+        });
+
+        integrationsToggle?.addEventListener('click', () => {
+            integrationsPanel?.classList.toggle('open');
+        });
+
+        async function refreshCalendarStatus() {
+            if (!calendarStatus) return;
+            try {
+                const res = await fetch('/api/tools/calendar/status');
+                const json = await res.json();
+                const connected = Boolean(json.connected);
+                const configured = Boolean(json.configured);
+                calendarStatus.classList.remove('connected', 'not-configured');
+                if (!configured) calendarStatus.classList.add('not-configured');
+                if (connected) calendarStatus.classList.add('connected');
+                const label = calendarStatus.querySelector('.label');
+                if (label) {
+                    label.textContent = connected ? 'Calendar connected' : (configured ? 'Calendar not connected' : 'Calendar not configured');
+                }
+            } catch {
+                calendarStatus.classList.add('not-configured');
+                const label = calendarStatus.querySelector('.label');
+                if (label) label.textContent = 'Calendar status unknown';
+            }
+        }
+
+        // initial + periodic refresh
+        refreshCalendarStatus();
+        setInterval(refreshCalendarStatus, 5000);
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = tab.dataset.tab;
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(target).classList.add('active');
+                if (target === 'ask-pulse' && chatContainer.children.length > 0) {
+                    askPulseEmpty.style.display = 'none';
+                }
+            });
+        });
+
+        function switchToAskPulse() {
+            document.querySelector('.tab[data-tab="ask-pulse"]').click();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function markdownToHtml(text) {
+            if (!text || typeof text !== 'string') return '';
+            let html = escapeHtml(text);
+            // Code blocks (fenced)
+            html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => '<pre><code>' + escapeHtml(code.trim()) + '</code></pre>');
+            // Inline code
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            // Bold ** or __
+            html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+            // Italic * or _ (single, not part of **)
+            html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+            // Links [text](url)
+            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+            // Lists and paragraphs: split by newlines
+            const lines = html.split(/\n/);
+            const blocks = [];
+            let i = 0;
+            while (i < lines.length) {
+                const line = lines[i];
+                const bulletMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+                const numMatch = line.match(/^\s*(\d+)\.\s+(.*)$/);
+                if (bulletMatch) {
+                    const listItems = [];
+                    while (i < lines.length && lines[i].match(/^\s*[-*+]\s+/)) {
+                        listItems.push(lines[i].replace(/^\s*[-*+]\s+/, ''));
+                        i++;
+                    }
+                    blocks.push('<ul><li>' + listItems.join('</li><li>') + '</li></ul>');
+                    continue;
+                }
+                if (numMatch) {
+                    const listItems = [];
+                    while (i < lines.length && lines[i].match(/^\s*\d+\.\s+/)) {
+                        listItems.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+                        i++;
+                    }
+                    blocks.push('<ol><li>' + listItems.join('</li><li>') + '</li></ol>');
+                    continue;
+                }
+                if (line.trim() === '') {
+                    blocks.push('<br>');
+                } else {
+                    blocks.push('<p>' + line + '</p>');
+                }
+                i++;
+            }
+            return blocks.join('');
+        }
+
+        function toggleSendButton() {
+            sendBtn.classList.toggle('active', chatInput.value.trim().length > 0);
+        }
+
+        function getGleamStarSvg() {
+            const id = 'gleam_star_' + Math.random().toString(36).slice(2, 9);
+            return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/><path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#${id})"/><defs><linearGradient id="${id}" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs></svg>`;
+        }
+
+        function addMessage(text, isUser = false) {
+            askPulseEmpty.style.display = 'none';
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            if (isUser) {
+                avatar.textContent = '👤';
+            } else {
+                avatar.innerHTML = getGleamStarSvg();
+            }
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            if (isUser) {
+                content.textContent = text;
+            } else {
+                content.innerHTML = markdownToHtml(text);
+            }
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(content);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return messageDiv;
+        }
+
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant';
+            typingDiv.id = 'typingIndicator';
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.innerHTML = getGleamStarSvg();
+            const indicator = document.createElement('div');
+            indicator.className = 'typing-indicator';
+            indicator.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+            typingDiv.appendChild(avatar);
+            typingDiv.appendChild(indicator);
+            chatContainer.appendChild(typingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById('typingIndicator');
+            if (el) el.remove();
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = `Error: ${message}`;
+            chatContainer.appendChild(errorDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Coordinator path: POST /api/chat (Gemini + tools). Fallback: direct Omni job.
+        async function sendViaCoordinator(message) {
+            const debug = Boolean(debugEnabledEl?.checked);
+            addDebug({ type: 'client_send_coordinator', debug, geminiConversationId });
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, conversationId: geminiConversationId, debug }),
+            });
+            if (response.status === 503) return null;
+            if (!response.ok) {
+                const err = await response.json();
+                addDebug({ type: 'coordinator_error', status: response.status, error: err.error || 'Chat failed' });
+                throw new Error(err.error || 'Chat failed');
+            }
+            const json = await response.json();
+            if (json.debug && Array.isArray(json.debug)) {
+                for (const evt of json.debug) {
+                    addDebug({ type: 'trace', ...evt });
+                }
+            }
+            addDebug({ type: 'coordinator_reply', preview: String(json.reply || '').slice(0, 180) });
+            return json;
+        }
+
+        async function submitJob(prompt) {
+            const response = await fetch('/api/agentic/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt,
+                    conversationId: omniConversationId || undefined,
+                }),
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                const msg = err.error || 'Failed to submit job';
+                const detail = err.details?.message || err.details?.detail || (typeof err.details?.detail === 'string' ? err.details.detail : null);
+                throw new Error(detail ? `${msg}: ${detail}` : msg);
+            }
+            return await response.json();
+        }
+
+        async function pollJobStatus(jobId) {
+            const response = await fetch(`/api/agentic/jobs/${jobId}`);
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Failed to get job status');
+            }
+            return await response.json();
+        }
+
+        async function getJobResult(jobId) {
+            const response = await fetch(`/api/agentic/jobs/${jobId}/result`);
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Failed to get result');
+            }
+            return await response.json();
+        }
+
+        async function sendMessage(text = null) {
+            const message = text || chatInput.value.trim();
+            if (!message) return;
+            if (isSending) return;
+            isSending = true;
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+            addDebug({ type: 'client_send', messagePreview: String(message).slice(0, 140) });
+
+            addMessage(message, true);
+            chatInput.value = '';
+            toggleSendButton();
+            showTypingIndicator();
+
+            try {
+                const coord = await sendViaCoordinator(message);
+                if (coord) {
+                    removeTypingIndicator();
+                    addMessage(coord.reply, false);
+                    if (coord.conversationId) geminiConversationId = coord.conversationId;
+                    addDebug({ type: 'client_done', path: 'coordinator' });
+                    return;
+                }
+
+                // Fallback: direct Omni agentic job (no Gemini)
+                addDebug({ type: 'fallback_direct_omni' });
+                const { jobId, conversationId: newConvId } = await submitJob(message);
+                if (newConvId) omniConversationId = newConvId;
+                addDebug({ type: 'omni_job_created', jobId });
+                let state = 'QUEUED';
+                let pollCount = 0;
+                const maxPolls = 60;
+
+                while (state !== 'COMPLETE' && state !== 'FAILED' && state !== 'CANCELLED' && pollCount < maxPolls) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const status = await pollJobStatus(jobId);
+                    state = status.state;
+                    if (pollCount % 2 === 0) addDebug({ type: 'omni_poll', jobId, state, progress: status.progress?.message || null });
+                    if (status.progress?.message) {
+                        const indicator = document.getElementById('typingIndicator');
+                        if (indicator) {
+                            const content = indicator.querySelector('.typing-indicator');
+                            if (content) content.innerHTML = `<div style="font-size: 12px; color: #666;">${status.progress.message}</div>`;
+                        }
+                    }
+                    pollCount++;
+                }
+
+                removeTypingIndicator();
+                if (state === 'COMPLETE') {
+                    const result = await getJobResult(jobId);
+                    addMessage(result.resultSummary || 'Analysis complete.', false);
+                    // Include Omni query spec in debug (if present)
+                    const actions = Array.isArray(result.actions) ? result.actions : [];
+                    const firstQuery = actions.find((a) => a?.result?.query)?.result?.query || null;
+                    addDebug({ type: 'omni_query_spec', jobId, query: firstQuery });
+                    addDebug({ type: 'client_done', path: 'direct_omni' });
+                } else if (state === 'FAILED') {
+                    const status = await pollJobStatus(jobId);
+                    showError(status.error?.message || 'Job failed');
+                } else if (state === 'CANCELLED') {
+                    showError('Job was cancelled');
+                } else {
+                    showError('Job timed out');
+                }
+            } catch (err) {
+                removeTypingIndicator();
+                showError(err.message || 'Something went wrong');
+                addDebug({ type: 'client_error', error: err.message || String(err) });
+            } finally {
+                isSending = false;
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                toggleSendButton();
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>

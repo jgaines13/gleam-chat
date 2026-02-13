@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gleam Pulse — Design mockup (purple theme)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #e0d8e4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Phone frame */
+        .phone-container {
+            width: 375px;
+            height: 812px;
+            background: #1a1a1a;
+            border-radius: 40px;
+            padding: 8px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            border-radius: 32px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            /* Reference: soft gradient from onboarding screen */
+            background: linear-gradient(180deg, #F8F2F9 0%, #F0E8F2 40%, #E8E0EC 100%);
+        }
+
+        .status-bar {
+            height: 44px;
+            background: transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 24px;
+            color: #1a1a1a;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        /* ——— Header ——— */
+        .header {
+            padding: 12px 20px 16px;
+            background: transparent;
+            border-bottom: 1px solid rgba(167, 123, 232, 0.15);
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .logo-row { display: flex; align-items: center; gap: 8px; }
+
+        .gleam-logo {
+            height: 24px;
+            width: auto;
+            flex-shrink: 0;
+            display: block;
+            color: #1a1a1a;
+        }
+        .gleam-logo svg { height: 100%; width: auto; display: block; }
+
+        .brand-font {
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-weight: 800;
+            color: #1a1a1a;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .app-title { font-size: 20px; }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: #5a5260;
+            margin-left: 32px;
+            margin-top: 6px;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(167, 123, 232, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #A77BE8;
+            font-size: 18px;
+        }
+
+        /* Tabs — pill / underline in accent purple */
+        .tabs {
+            display: flex;
+            gap: 6px;
+            padding: 0 20px;
+            margin-top: 10px;
+        }
+
+        .tab {
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b5b73;
+            cursor: pointer;
+            border-radius: 999px;
+            border: 1px solid rgba(167, 123, 232, 0.35);
+            background: transparent;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+
+        .tab:hover {
+            border-color: rgba(167, 123, 232, 0.55);
+            color: #5a5260;
+        }
+
+        .tab.active {
+            background: #A77BE8;
+            color: #fff;
+            border-color: #A77BE8;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            display: none;
+            flex-direction: column;
+        }
+
+        .tab-content.active { display: flex; }
+
+        /* ——— Overview (cards with soft lift, reference Smart Home) ——— */
+        .overview-content { padding: 20px; }
+
+        .greeting { font-size: 22px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+        .greeting-sub { font-size: 14px; color: #5a5260; margin-bottom: 20px; }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .kpi-card {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(167, 123, 232, 0.12);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: 0 2px 12px rgba(167, 123, 232, 0.08);
+        }
+
+        .kpi-label { font-size: 12px; color: #5a5260; margin-bottom: 6px; }
+        .kpi-value { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+        .kpi-trend { font-size: 12px; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+        .kpi-trend.up { color: #2e7d32; }
+        .kpi-trend.down { color: #c62828; }
+        .kpi-spark { height: 24px; margin-top: 8px; opacity: 0.8; }
+
+        .alert-card {
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        .alert-card.warning {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(167, 123, 232, 0.25);
+        }
+
+        .alert-card.success {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(176, 137, 216, 0.35);
+        }
+
+        .alert-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+        .alert-icon { font-size: 20px; }
+        .alert-title { font-weight: 600; font-size: 14px; color: #1a1a1a; }
+        .alert-body { font-size: 13px; color: #444; line-height: 1.45; margin-bottom: 12px; }
+
+        .ask-pulse-cta {
+            font-size: 13px;
+            font-weight: 600;
+            color: #A77BE8;
+            cursor: pointer;
+        }
+        .ask-pulse-cta:hover { text-decoration: underline; }
+
+        /* ——— Ask Pulse ——— */
+        .ask-pulse-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px 20px;
+        }
+
+        .ask-pulse-empty {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .ask-pulse-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ask-pulse-icon svg { width: 100%; height: 100%; display: block; }
+
+        .ask-pulse-title { font-size: 24px; font-weight: 700; color: #1a1a1a; margin-bottom: 8px; }
+        .ask-pulse-subtitle { font-size: 14px; color: #5a5260; margin-bottom: 28px; max-width: 280px; }
+
+        .suggested-questions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; }
+
+        .suggested-btn {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(167, 123, 232, 0.2);
+            border-radius: 14px;
+            padding: 14px 18px;
+            font-size: 14px;
+            color: #333;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 1px 6px rgba(167, 123, 232, 0.06);
+        }
+
+        .suggested-btn:hover {
+            border-color: #A77BE8;
+            color: #A77BE8;
+            box-shadow: 0 2px 12px rgba(167, 123, 232, 0.15);
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 0 0 16px;
+        }
+
+        .message { display: flex; gap: 10px; }
+        .message.user { flex-direction: row-reverse; }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .message.user .message-avatar {
+            background: #A77BE8;
+            color: white;
+        }
+
+        .message.assistant .message-avatar {
+            background: transparent;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .message.assistant .message-avatar svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .message-content {
+            max-width: 82%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: #A77BE8;
+            color: white;
+            border-bottom-right-radius: 6px;
+        }
+
+        .message.assistant .message-content {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border-bottom-left-radius: 6px;
+            border: 1px solid rgba(167, 123, 232, 0.1);
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .input-container {
+            padding: 12px 0 24px;
+            background: transparent;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 14px 18px;
+            border: 1px solid rgba(167, 123, 232, 0.25);
+            border-radius: 24px;
+            font-size: 15px;
+            outline: none;
+            background: rgba(255, 255, 255, 0.9);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .chat-input:focus {
+            border-color: #A77BE8;
+            box-shadow: 0 0 0 2px rgba(167, 123, 232, 0.2);
+        }
+
+        .send-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: #A77BE8;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 14px rgba(167, 123, 232, 0.4);
+        }
+
+        .send-button:hover { filter: brightness(1.05); }
+
+        /* Mockup-only: footer strip for design reference */
+        .mockup-footer {
+            padding: 8px 20px;
+            font-size: 11px;
+            color: #B089D8;
+            text-align: center;
+            border-top: 1px solid rgba(167, 123, 232, 0.12);
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-container">
+        <div class="phone-screen">
+            <div class="status-bar">
+                <span>9:41</span>
+                <span>●●●</span>
+                <span>🔋</span>
+            </div>
+
+            <div class="header">
+                <div class="header-top">
+                    <div class="logo-row">
+                        <span class="gleam-logo" aria-hidden="true">
+                            <svg viewBox="0 0 96 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/>
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#gleam_star_gradient_mockup)"/>
+                                <path d="M92.9749 1.76932C93.0545 1.63014 93.1738 1.56055 93.3328 1.56055H95.5996C95.7984 1.56055 95.8978 1.65996 95.8978 1.8588V22.1399C95.8978 22.3388 95.7984 22.4382 95.5996 22.4382H93.3328C93.134 22.4382 93.0346 22.3388 93.0346 22.1399V7.34664C93.0346 7.28699 93.0147 7.25716 92.9749 7.25716C92.9551 7.25716 92.9252 7.27705 92.8855 7.31681L90.0222 12.6555C89.9626 12.7947 89.8731 12.8643 89.7538 12.8643C89.6345 12.8643 89.545 12.7947 89.4854 12.6555L86.652 7.34664C86.6122 7.30687 86.5725 7.28699 86.5327 7.28699C86.5128 7.28699 86.5029 7.31681 86.5029 7.37646V22.1399C86.5029 22.3388 86.4035 22.4382 86.2046 22.4382H83.9379C83.7391 22.4382 83.6396 22.3388 83.6396 22.1399V1.8588C83.6396 1.65996 83.7391 1.56055 83.9379 1.56055H86.2046C86.3438 1.56055 86.4631 1.63014 86.5625 1.76932L89.6942 7.37646C89.7141 7.39635 89.7439 7.40629 89.7836 7.40629C89.8234 7.40629 89.8532 7.39635 89.8731 7.37646L92.9749 1.76932Z" fill="currentColor"/>
+                                <path d="M78.8808 22.4382C78.7018 22.4382 78.5925 22.3487 78.5527 22.1698L77.8966 18.7399C77.8966 18.7001 77.8767 18.6703 77.8369 18.6504C77.817 18.6305 77.7872 18.6206 77.7474 18.6206H72.8859C72.8462 18.6206 72.8064 18.6305 72.7666 18.6504C72.7467 18.6703 72.7368 18.7001 72.7368 18.7399L72.1105 22.1698C72.0906 22.3487 71.9812 22.4382 71.7824 22.4382H69.5157C69.4163 22.4382 69.3367 22.4084 69.2771 22.3487C69.2373 22.2891 69.2274 22.2095 69.2472 22.1101L73.6912 1.82897C73.731 1.65002 73.8403 1.56055 74.0193 1.56055H76.6737C76.8726 1.56055 76.9819 1.65002 77.0018 1.82897L81.4756 22.1101V22.1698C81.4756 22.3487 81.3861 22.4382 81.2072 22.4382H78.8808ZM73.2438 16.2346C73.2438 16.3141 73.2736 16.3539 73.3333 16.3539H77.3001C77.3597 16.3539 77.3895 16.3141 77.3895 16.2346L75.3614 5.6466C75.3415 5.60684 75.3216 5.58695 75.3018 5.58695C75.2819 5.58695 75.262 5.60684 75.2421 5.6466L73.2438 16.2346Z" fill="currentColor"/>
+                                <path d="M67.1858 3.73779C67.1858 3.93662 67.0864 4.03604 66.8875 4.03604H60.1769C60.0973 4.03604 60.0576 4.07581 60.0576 4.15534V10.6274C60.0576 10.7069 60.0973 10.7467 60.1769 10.7467H64.2927C64.4916 10.7467 64.591 10.8461 64.591 11.045V12.924C64.591 13.1228 64.4916 13.2222 64.2927 13.2222H60.1769C60.0973 13.2222 60.0576 13.262 60.0576 13.3415V19.8434C60.0576 19.9229 60.0973 19.9627 60.1769 19.9627H66.8875C67.0864 19.9627 67.1858 20.0621 67.1858 20.261V22.1399C67.1858 22.3388 67.0864 22.4382 66.8875 22.4382H57.4926C57.2938 22.4382 57.1943 22.3388 57.1943 22.1399V1.8588C57.1943 1.65996 57.2938 1.56055 57.4926 1.56055H66.8875C67.0864 1.56055 67.1858 1.65996 67.1858 1.8588V3.73779Z" fill="currentColor"/>
+                                <path d="M45.3471 22.4382C45.1482 22.4382 45.0488 22.3388 45.0488 22.1399V1.8588C45.0488 1.65996 45.1482 1.56055 45.3471 1.56055H47.6138C47.8126 1.56055 47.912 1.65996 47.912 1.8588V19.8434C47.912 19.9229 47.9518 19.9627 48.0314 19.9627H54.7122C54.911 19.9627 55.0105 20.0621 55.0105 20.261V22.1399C55.0105 22.3388 54.911 22.4382 54.7122 22.4382H45.3471Z" fill="currentColor"/>
+                                <path d="M36.3685 22.6771C34.758 22.6771 33.4556 22.1999 32.4614 21.2455C31.4871 20.2911 31 19.0285 31 17.4577V6.54168C31 4.97088 31.4871 3.70828 32.4614 2.75388C33.4556 1.79947 34.758 1.32227 36.3685 1.32227C37.9791 1.32227 39.2815 1.79947 40.2756 2.75388C41.2698 3.70828 41.7669 4.98082 41.7669 6.5715V7.82416C41.7669 8.023 41.6675 8.12241 41.4687 8.12241H39.2019C39.0031 8.12241 38.9037 8.023 38.9037 7.82416V6.51185C38.9037 5.69663 38.6651 5.04047 38.1879 4.54339C37.7306 4.0463 37.1241 3.79776 36.3685 3.79776C35.613 3.79776 34.9966 4.0463 34.5194 4.54339C34.0621 5.04047 33.8334 5.69663 33.8334 6.51185V17.4875C33.8334 18.3028 34.0621 18.9589 34.5194 19.456C34.9966 19.9531 35.613 20.2016 36.3685 20.2016C37.1241 20.2016 37.7306 19.9531 38.1879 19.456C38.6651 18.9589 38.9037 18.3028 38.9037 17.4875V14.2068C38.9037 14.1272 38.8639 14.0875 38.7844 14.0875H36.5177C36.3188 14.0875 36.2194 13.988 36.2194 13.7892V11.94C36.2194 11.7412 36.3188 11.6418 36.5177 11.6418H41.4687C41.6675 11.6418 41.7669 11.7412 41.7669 11.94V17.4577C41.7669 19.0285 41.2698 20.2911 40.2756 21.2455C39.2815 22.1999 37.9791 22.6771 36.3685 22.6771Z" fill="currentColor"/>
+                                <defs><linearGradient id="gleam_star_gradient_mockup" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
+                            </svg>
+                        </span>
+                        <span class="brand-font app-title">PULSE</span>
+                    </div>
+                    <div class="user-avatar">👤</div>
+                </div>
+                <div class="header-subtitle">Carhartt · <span id="headerDate"></span></div>
+                <div class="tabs">
+                    <div class="tab active" data-tab="overview">Overview</div>
+                    <div class="tab" data-tab="ask-pulse">Ask Pulse</div>
+                </div>
+            </div>
+
+            <!-- Overview tab -->
+            <div class="tab-content active" id="overview">
+                <div class="overview-content">
+                    <div class="greeting">Good morning, Jess 👋</div>
+                    <div class="greeting-sub">Here's how your brand is performing.</div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Avg Daily Transactions</div>
+                            <div class="kpi-value">1,142</div>
+                            <div class="kpi-trend up">↑ +6.3% vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 18 L20 14 L40 16 L60 8 L80 12" /></svg>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Operator Satisfaction</div>
+                            <div class="kpi-value">4.32 / 5.0</div>
+                            <div class="kpi-trend up">↑ +0.14 vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 20 L20 18 L40 12 L60 10 L80 6" /></svg>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Speed of Service</div>
+                            <div class="kpi-value">3:42 avg</div>
+                            <div class="kpi-trend up">↑ -8s vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 8 L20 10 L40 12 L60 14 L80 16" /></svg>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Guest Satisfaction</div>
+                            <div class="kpi-value">92.1%</div>
+                            <div class="kpi-trend down">↓ -0.4% vs last mo.</div>
+                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#c62828" stroke-width="1.5"><path d="M0 6 L20 8 L40 10 L60 14 L80 18" /></svg>
+                        </div>
+                    </div>
+
+                    <div class="alert-card warning">
+                        <div class="alert-header">
+                            <span class="alert-icon">⚠️</span>
+                            <span class="alert-title">Speed of Delivery Alert</span>
+                        </div>
+                        <div class="alert-body">3 locations in Northern Atlanta saw drive-thru times increase 12–31% last week.</div>
+                        <div class="ask-pulse-cta">Ask Pulse for details →</div>
+                    </div>
+
+                    <div class="alert-card success">
+                        <div class="alert-header">
+                            <span class="alert-icon">🎉</span>
+                            <span class="alert-title">Buckhead Renovation Impact</span>
+                        </div>
+                        <div class="alert-body">Location #02901 jumped from #8 to #3 in daily transactions since drive-thru renovation completed. Transactions up 31%.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ask Pulse tab -->
+            <div class="tab-content" id="ask-pulse">
+                <div class="ask-pulse-content">
+                    <div class="ask-pulse-empty" id="askPulseEmpty">
+                        <div class="ask-pulse-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/>
+                                <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#gleam_star_empty_mockup)"/>
+                                <defs><linearGradient id="gleam_star_empty_mockup" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
+                            </svg>
+                        </div>
+                        <div class="ask-pulse-title">Ask Pulse</div>
+                        <div class="ask-pulse-subtitle">Ask anything about your locations, performance, and operations.</div>
+                        <div class="suggested-questions">
+                            <button class="suggested-btn">Seasonality trends in orders?</button>
+                            <button class="suggested-btn">Operator satisfaction trend?</button>
+                            <button class="suggested-btn">Speed of service drops?</button>
+                        </div>
+                    </div>
+                    <div class="chat-container" id="chatContainer">
+                        <!-- Sample messages to preview bubble styling -->
+                        <div class="message user">
+                            <div class="message-avatar">👤</div>
+                            <div class="message-content">Seasonality trends in orders?</div>
+                        </div>
+                        <div class="message assistant">
+                            <div class="message-avatar">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/><path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#gleam_star_sample)"/><defs><linearGradient id="gleam_star_sample" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs></svg>
+                            </div>
+                            <div class="message-content">Here are the seasonality trends for orders across your region over the last 12 months…</div>
+                        </div>
+                    </div>
+                    <div class="input-container">
+                        <input type="text" class="chat-input" placeholder="Ask about your business..." readonly>
+                        <button class="send-button">↑</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mockup-footer">Design mockup — purple theme (#A77BE8, #B089D8, gradient #F8F2F9 → #E8E0EC)</div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('headerDate').textContent = new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+        document.querySelectorAll('.tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var t = tab.getAttribute('data-tab');
+                document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('active'); });
+                document.querySelectorAll('.tab-content').forEach(function (x) { x.classList.remove('active'); });
+                tab.classList.add('active');
+                var content = document.getElementById(t);
+                if (content) content.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>
