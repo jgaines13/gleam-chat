@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
@@ -7,6 +9,7 @@ const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'pulse-dev-secret-change-in-production';
 
 const OMNI_API_KEY = process.env.OMNI_API_KEY;
 const OMNI_BASE_URL = (process.env.OMNI_BASE_URL || '').replace(/\/$/, '');
@@ -15,6 +18,104 @@ const OMNI_BRANCH_ID = process.env.OMNI_BRANCH_ID;
 const OMNI_TOPIC_NAME = process.env.OMNI_TOPIC_NAME;
 
 app.use(express.json());
+
+// --- Auth: session + user store (Levi's / Carhartt) ---
+const USERS_PATH = path.join(__dirname, '.data', 'users.json');
+
+async function ensureUsersExist() {
+  await ensureDataDir();
+  let data = await readJsonIfExists(USERS_PATH);
+  if (data && Array.isArray(data.users) && data.users.length >= 2) return;
+  const defaultPassword = 'password';
+  const hash = await bcrypt.hash(defaultPassword, 10);
+  data = {
+    users: [
+      { id: 'carhartt', username: 'carhartt', passwordHash: hash, profile: 'carhartt', displayName: 'Carhartt' },
+      { id: 'levis', username: 'levis', passwordHash: hash, profile: 'levis', displayName: "Levi's" },
+    ],
+  };
+  await writeJson(USERS_PATH, data);
+}
+
+async function findUserByUsername(username) {
+  const data = await readJsonIfExists(USERS_PATH);
+  if (!data || !Array.isArray(data.users)) return null;
+  const u = String(username || '').trim().toLowerCase();
+  return data.users.find((x) => x.username.toLowerCase() === u) || null;
+}
+
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    name: 'pulse.sid',
+    cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
+  })
+);
+
+function requireAuth(req, res, next) {
+  const allowed =
+    (req.path === '/login' && req.method === 'GET') ||
+    (req.path === '/api/login' && req.method === 'POST') ||
+    req.path === '/api/me';
+  if (allowed) return next();
+  if (!req.session || !req.session.userId) {
+    if (req.path === '/' || req.path === '/index.html') return res.redirect('/login');
+    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+app.use(requireAuth);
+
+app.get('/login', (req, res) => {
+  if (req.session && req.session.userId) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/api/login', express.urlencoded({ extended: true }), async (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+  if (!username || !password) {
+    return res.redirect('/login?error=missing');
+  }
+  const user = await findUserByUsername(username);
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    return res.redirect('/login?error=invalid');
+  }
+  req.session.userId = user.id;
+  req.session.profile = user.profile;
+  req.session.displayName = user.displayName;
+  req.session.username = user.username;
+  res.redirect('/');
+});
+
+app.get('/api/me', (req, res) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  res.json({
+    profile: req.session.profile,
+    displayName: req.session.displayName,
+    username: req.session.username,
+  });
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => {});
+  res.redirect('/login');
+});
+
+app.get('/api/logout', (req, res) => {
+  req.session.destroy(() => {});
+  res.redirect('/login');
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- Local token storage (prototype) ---
@@ -1438,12 +1539,15 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Pulse app running at http://localhost:${PORT}`);
-  if (!OMNI_API_KEY || !OMNI_BASE_URL || !OMNI_MODEL_ID) {
-    console.warn('Warning: Set OMNI_API_KEY, OMNI_BASE_URL, and OMNI_MODEL_ID in .env to use Ask Pulse.');
-  }
-  if (!process.env.GEMINI_API_KEY) {
+(async () => {
+  await ensureUsersExist();
+  app.listen(PORT, () => {
+    console.log(`Pulse app running at http://localhost:${PORT}`);
+    if (!OMNI_API_KEY || !OMNI_BASE_URL || !OMNI_MODEL_ID) {
+      console.warn('Warning: Set OMNI_API_KEY, OMNI_BASE_URL, and OMNI_MODEL_ID in .env to use Ask Pulse.');
+    }
+    if (!process.env.GEMINI_API_KEY) {
     console.warn('Warning: Set GEMINI_API_KEY in .env to use the Gemini coordinator (POST /api/chat).');
   }
 });
+})();
