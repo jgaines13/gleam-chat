@@ -527,11 +527,11 @@ async function runOmniAnalysis(prompt, opts = {}) {
   });
   onEvent?.({ type: 'omni_job_created', jobId });
 
-  const maxPolls = 60;
-  const pollIntervalMs = 2000;
+  const maxPolls = 90;
+  const pollIntervalMs = 800;
 
   for (let i = 0; i < maxPolls; i++) {
-    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    await new Promise((r) => setTimeout(r, i === 0 ? 400 : pollIntervalMs));
     const status = await omniFetch(`/jobs/${jobId}`);
     onEvent?.({ type: 'omni_poll', jobId, state: status.state, progress: status.progress?.message || null });
     if (status.state === 'COMPLETE') {

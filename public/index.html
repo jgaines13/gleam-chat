@@ -832,16 +832,16 @@
                             <span class="alert-icon">⚠️</span>
                             <span class="alert-title">Speed of Delivery Alert</span>
                         </div>
-                        <div class="alert-body">3 locations in Northern Atlanta saw drive-thru times increase 12–31% last week.</div>
-                        <div class="ask-pulse-cta" onclick="switchToAskPulse()">Ask Pulse for details →</div>
+                        <div class="alert-body">6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.</div>
+                        <div class="ask-pulse-cta" onclick="switchToAskPulse('Can you give me more details on the speed of delivery alert? 6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.')">Ask Pulse for details →</div>
                     </div>
 
                     <div class="alert-card success">
                         <div class="alert-header">
                             <span class="alert-icon">🎉</span>
-                            <span class="alert-title">Buckhead Renovation Impact</span>
+                            <span class="alert-title">Marketing Campaign Impact</span>
                         </div>
-                        <div class="alert-body">Location #02901 jumped from #8 to #3 in daily transactions since drive-thru renovation completed. Transactions up 31%.</div>
+                        <div class="alert-body">New member signups jumped up 12% since campaign kicked off.</div>
                     </div>
                 </div>
             </div>
@@ -1193,8 +1193,13 @@
             });
         });
 
-        function switchToAskPulse() {
+        function switchToAskPulse(message) {
             document.querySelector('.tab[data-tab="ask-pulse"]').click();
+            if (message && chatInput) {
+                chatInput.value = message;
+                if (typeof toggleSendButton === 'function') toggleSendButton();
+                chatInput.focus();
+            }
         }
 
         function escapeHtml(text) {
@@ -1415,7 +1420,7 @@
                 const maxPolls = 60;
 
                 while (state !== 'COMPLETE' && state !== 'FAILED' && state !== 'CANCELLED' && pollCount < maxPolls) {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(resolve => setTimeout(resolve, pollCount === 0 ? 500 : 1000));
                     const status = await pollJobStatus(jobId);
                     state = status.state;
                     if (pollCount % 2 === 0) addDebug({ type: 'omni_poll', jobId, state, progress: status.progress?.message || null });
