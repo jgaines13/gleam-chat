@@ -722,17 +722,17 @@ async function runOmniAnalysis(prompt, opts = {}) {
 // --- KPI: Avg Daily Transactions (Omni run-query, RLS via order_items_embed) ---
 const AVG_DAILY_TRANSACTIONS_QUERY = {
   limit: 1000,
-  sorts: [{ column_name: 'order_items_embed.created_at[date]', sort_descending: false }],
-  table: 'order_items_embed',
+  sorts: [{ column_name: 'omni_dbt_ecomm__order_items.created_at[date]', sort_descending: false }],
+  table: 'omni_dbt_ecomm__order_items',
   fields: [
-    'order_items_embed.created_at[date]',
+    'omni_dbt_ecomm__order_items.created_at[date]',
     'omni_period_pivot',
-    'order_items_embed.total_orders',
+    'omni_dbt_ecomm__order_items.order_id_count_distinct',
   ],
   pivots: ['omni_period_pivot'],
   dbtMode: false,
   filters: {
-    'order_items_embed.created_at': {
+    'omni_dbt_ecomm__order_items.created_at': {
       isFiscal: false,
       is_negative: false,
       kind: 'BETWEEN',
@@ -742,14 +742,14 @@ const AVG_DAILY_TRANSACTIONS_QUERY = {
       ui_type: 'BETWEEN',
       offset_interval_string: null,
     },
-    'order_items_embed.status': {
+    'omni_dbt_ecomm__order_items.status': {
       kind: 'EQUALS',
       type: 'string',
       values: ['Returned', 'Cancelled'],
       is_negative: true,
     },
   },
-  modelId: 'edcfa923-6a47-43a0-9873-ee42624c5d04',
+  modelId: '8c347d97-9419-41c6-9afd-08eff103a2dd',
   version: 8,
   rewriteSql: true,
   row_totals: {},
@@ -764,8 +764,8 @@ const AVG_DAILY_TRANSACTIONS_QUERY = {
   custom_summary_types: {},
   join_paths_from_topic_name: 'order_items_embed',
   period_over_period_computations: [
-    { date_filter_field_name: 'order_items_embed.created_at', periods_ago: null, time_unit_name: null },
-    { date_filter_field_name: 'order_items_embed.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+    { date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
   ],
 };
 
@@ -774,7 +774,7 @@ const SPEED_OF_SERVICE_QUERY = {
   column_limit: 50,
   dbtMode: false,
   limit: 1000,
-  modelId: 'edcfa923-6a47-43a0-9873-ee42624c5d04',
+  modelId: '8c347d97-9419-41c6-9afd-08eff103a2dd',
   rewriteSql: true,
   default_group_by: true,
   userEditedSQL: '',
@@ -783,13 +783,13 @@ const SPEED_OF_SERVICE_QUERY = {
   custom_summary_types: {},
   dimensionIndex: 2,
   fields: [
-    'order_items_embed.created_at[date]',
+    'omni_dbt_ecomm__order_items.created_at[date]',
     'omni_period_pivot',
-    'order_items_embed.time_to_ship_average',
+    'omni_dbt_ecomm__order_items.time_to_ship_average',
   ],
   fill_fields: [],
   filters: {
-    'order_items_embed.created_at': {
+    'omni_dbt_ecomm__order_items.created_at': {
       isFiscal: false,
       is_negative: false,
       kind: 'BETWEEN',
@@ -799,7 +799,7 @@ const SPEED_OF_SERVICE_QUERY = {
       offset_interval_string: null,
       right_side: 'today',
     },
-    'order_items_embed.status': {
+    'omni_dbt_ecomm__order_items.status': {
       type: 'string',
       kind: 'EQUALS',
       values: ['Returned', 'Cancelled'],
@@ -809,13 +809,13 @@ const SPEED_OF_SERVICE_QUERY = {
   join_via_map: {},
   pivots: ['omni_period_pivot'],
   row_totals: {},
-  sorts: [{ column_name: 'order_items_embed.created_at[date]', sort_descending: false }],
-  table: 'order_items_embed',
+  sorts: [{ column_name: 'omni_dbt_ecomm__order_items.created_at[date]', sort_descending: false }],
+  table: 'omni_dbt_ecomm__order_items',
   version: 8,
   join_paths_from_topic_name: 'order_items_embed',
   period_over_period_computations: [
-    { date_filter_field_name: 'order_items_embed.created_at', periods_ago: null, time_unit_name: null },
-    { date_filter_field_name: 'order_items_embed.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+    { date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
   ],
 };
 
@@ -925,12 +925,61 @@ function parseSpeedOfServiceFromResult(data) {
   };
 }
 
+// --- KPI: Customer Signups (users count, RLS via order_items_embed) ---
+const CUSTOMER_SIGNUPS_QUERY = {
+  column_limit: 50,
+  dbtMode: false,
+  limit: 1000,
+  modelId: '04cc0678-5677-40c0-b2b8-ff168fd29710',
+  rewriteSql: true,
+  default_group_by: true,
+  userEditedSQL: '',
+  calculations: [],
+  column_totals: { '::total::': { type: 'aggregation' } },
+  custom_summary_types: {},
+  dimensionIndex: 2,
+  fields: [
+    'omni_dbt_ecomm__users.created_at[date]',
+    'omni_period_pivot',
+    'omni_dbt_ecomm__users.count',
+  ],
+  fill_fields: [],
+  filters: {
+    'omni_dbt_ecomm__users.created_at': {
+      isFiscal: true,
+      is_negative: false,
+      kind: 'BETWEEN',
+      left_side: 'this month',
+      type: 'date',
+      ui_type: 'BETWEEN',
+      right_side: 'today',
+      offset_interval_string: null,
+    },
+  },
+  join_via_map: {},
+  pivots: ['omni_period_pivot'],
+  row_totals: {},
+  sorts: [
+    { column_name: 'omni_period_pivot', sort_descending: false },
+    { column_name: 'omni_dbt_ecomm__users.created_at[date]', sort_descending: false },
+  ],
+  table: 'omni_dbt_ecomm__order_items',
+  version: 8,
+  join_paths_from_topic_name: 'order_items_embed',
+  transposed_measures: [],
+  period_over_period_computations: [
+    { date_filter_field_name: 'omni_dbt_ecomm__users.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'omni_dbt_ecomm__users.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+  ],
+  periodOverPeriodTransposed: false,
+};
+
 // --- KPI: AOV (average sale price, RLS via order_items_embed) ---
 const AOV_QUERY = {
   column_limit: 50,
   dbtMode: false,
   limit: 1000,
-  modelId: 'edcfa923-6a47-43a0-9873-ee42624c5d04',
+  modelId: '8c347d97-9419-41c6-9afd-08eff103a2dd',
   rewriteSql: true,
   default_group_by: true,
   userEditedSQL: '',
@@ -939,13 +988,13 @@ const AOV_QUERY = {
   custom_summary_types: {},
   dimensionIndex: 2,
   fields: [
-    'order_items_embed.created_at[date]',
+    'omni_dbt_ecomm__order_items.created_at[date]',
     'omni_period_pivot',
-    'order_items_embed.average_sale_price',
+    'omni_dbt_ecomm__order_items.sale_price_average',
   ],
   fill_fields: [],
   filters: {
-    'order_items_embed.created_at': {
+    'omni_dbt_ecomm__order_items.created_at': {
       isFiscal: false,
       is_negative: false,
       kind: 'BETWEEN',
@@ -955,7 +1004,7 @@ const AOV_QUERY = {
       offset_interval_string: null,
       right_side: 'today',
     },
-    'order_items_embed.status': {
+    'omni_dbt_ecomm__order_items.status': {
       type: 'string',
       kind: 'EQUALS',
       values: ['Returned', 'Cancelled'],
@@ -965,13 +1014,13 @@ const AOV_QUERY = {
   join_via_map: {},
   pivots: ['omni_period_pivot'],
   row_totals: {},
-  sorts: [{ column_name: 'order_items_embed.created_at[date]', sort_descending: false }],
-  table: 'order_items_embed',
+  sorts: [{ column_name: 'omni_dbt_ecomm__order_items.created_at[date]', sort_descending: false }],
+  table: 'omni_dbt_ecomm__order_items',
   version: 8,
   join_paths_from_topic_name: 'order_items_embed',
   period_over_period_computations: [
-    { date_filter_field_name: 'order_items_embed.created_at', periods_ago: null, time_unit_name: null },
-    { date_filter_field_name: 'order_items_embed.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+    { date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
   ],
 };
 
@@ -1067,6 +1116,99 @@ function parseAovFromResult(data) {
     trendFormatted,
     dailyValues,
     isImprovement: thisPeriod >= previousPeriod,
+  };
+}
+
+function parseCustomerSignupsFromResult(data) {
+  let raw = data?.result ?? data;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  let rows = Array.isArray(raw) ? raw : (raw?.rows || raw?.data || []);
+  if (!Array.isArray(rows) && raw && typeof raw === 'object') {
+    const nested = raw.result || raw.data || raw.rows;
+    rows = Array.isArray(nested) ? nested : [];
+  }
+  const columns = raw?.columns;
+  if (Array.isArray(columns) && columns.length && Array.isArray(rows) && rows.length && typeof rows[0] !== 'object') {
+    rows = rows.map((arr) => {
+      const obj = {};
+      const colNames = columns.map((c) => (typeof c === 'string' ? c : c?.name ?? c?.id ?? ''));
+      colNames.forEach((col, i) => { if (col) obj[col] = arr[i]; });
+      return obj;
+    });
+  }
+  if (!rows.length) return null;
+
+  const first = rows[0];
+  if (typeof first !== 'object' || first === null) return null;
+
+  const currentKey = Object.keys(first).find((k) => /current period|\.count|users\.count/i.test(k));
+  const previousKey = Object.keys(first).find((k) => /previous month|previous period/i.test(k));
+  const periodKey = Object.keys(first).find((k) => /^period$/i.test(k) || /pivot|omni_period/i.test(k));
+
+  if (!currentKey) return null;
+
+  const dataRows = rows.filter((row) => {
+    const periodVal = periodKey ? row[periodKey] : '';
+    const currentVal = row[currentKey];
+    if (typeof currentVal === 'string' && /created at|total|count/i.test(currentVal) && !/^\d+$/.test(currentVal)) return false;
+    if (typeof periodVal === 'string' && /created at date/i.test(periodVal.toLowerCase())) return false;
+    return true;
+  });
+
+  let thisPeriodTotal = 0;
+  let lastPeriodTotal = 0;
+  const summaryRow = dataRows.find((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const c = Number(row[currentKey]);
+    return p === '' && !Number.isNaN(c) && c >= 0;
+  });
+  if (summaryRow) {
+    thisPeriodTotal = Number(summaryRow[currentKey]) || 0;
+    lastPeriodTotal = previousKey != null ? Number(summaryRow[previousKey]) || 0 : 0;
+  } else {
+    for (const row of dataRows) {
+      const currentVal = Number(row[currentKey]);
+      if (Number.isNaN(currentVal)) continue;
+      const period = (periodKey ? row[periodKey] : '').toString().toLowerCase();
+      if (period.includes('last') || period.includes('previous') || period.includes('prior')) {
+        lastPeriodTotal += currentVal;
+      } else {
+        thisPeriodTotal += currentVal;
+      }
+    }
+    if (dataRows.length === 1) thisPeriodTotal = Number(dataRows[0][currentKey]) || 0;
+  }
+
+  const dailyRows = dataRows.filter((row) => {
+    const p = periodKey ? String(row[periodKey] || '').trim() : '';
+    const n = Number(row[currentKey]);
+    return p !== '' && !Number.isNaN(n) && n >= 0;
+  });
+  const dailyValues = dailyRows.map((row) => Number(row[currentKey]));
+
+  const valueFormatted = typeof thisPeriodTotal === 'number' && !Number.isNaN(thisPeriodTotal)
+    ? thisPeriodTotal.toLocaleString()
+    : '—';
+  let trendFormatted = null;
+  if (lastPeriodTotal > 0 && thisPeriodTotal != null) {
+    const pct = (((thisPeriodTotal - lastPeriodTotal) / lastPeriodTotal) * 100);
+    const sign = pct >= 0 ? '+' : '';
+    trendFormatted = `${sign}${pct.toFixed(1)}% vs last mo.`;
+  }
+
+  return {
+    value: thisPeriodTotal,
+    valueFormatted,
+    thisPeriodTotal,
+    lastPeriodTotal,
+    trendFormatted,
+    dailyValues,
   };
 }
 
@@ -1234,6 +1376,28 @@ app.get('/api/kpis/aov', requireConfig, async (req, res) => {
   } catch (err) {
     const status = err.status || 500;
     const message = err.message || 'Failed to load AOV';
+    res.status(status).json({
+      error: message,
+      details: err.body,
+    });
+  }
+});
+
+app.get('/api/kpis/customer-signups', requireConfig, async (req, res) => {
+  try {
+    const mcpUserId = getOmniUserId(req.session);
+    const data = await omniQueryRun(CUSTOMER_SIGNUPS_QUERY, { mcpUserId });
+    const parsed = parseCustomerSignupsFromResult(data);
+    if (!parsed) {
+      return res.status(502).json({
+        error: 'Could not parse Customer Signups from Omni result',
+        raw: data?.result != null ? { hasResult: true, rowCount: Array.isArray(data.result) ? data.result.length : 'n/a' } : data,
+      });
+    }
+    res.json(parsed);
+  } catch (err) {
+    const status = err.status || 500;
+    const message = err.message || 'Failed to load Customer Signups';
     res.status(status).json({
       error: message,
       details: err.body,

@@ -24,6 +24,36 @@
             padding: 20px;
         }
 
+        /* ——— Layout: mobile (default), tablet, web ——— */
+        .layout-toggle {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 9999;
+            display: flex;
+            gap: 4px;
+            padding: 6px 8px;
+            background: rgba(0, 0, 0, 0.75);
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .layout-toggle button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .layout-toggle button:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .layout-toggle button.active {
+            background: #A77BE8;
+            color: #fff;
+        }
+
         .phone-container {
             width: 375px;
             height: 812px;
@@ -31,6 +61,47 @@
             border-radius: 40px;
             padding: 8px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            transition: width 0.25s ease, height 0.25s ease, border-radius 0.25s ease, padding 0.25s ease, max-width 0.25s ease;
+        }
+
+        body[data-layout="tablet"] .phone-container {
+            width: 768px;
+            height: 1024px;
+            border-radius: 24px;
+            padding: 12px;
+        }
+
+        body[data-layout="web"] .phone-container {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            border-radius: 0;
+            padding: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        body[data-layout="web"] .phone-screen {
+            border-radius: 0;
+        }
+
+        body[data-layout="web"] {
+            padding: 0;
+            margin: 0;
+            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
+            align-items: stretch;
+            justify-content: stretch;
+        }
+
+        body[data-layout="web"] .phone-container {
+            align-self: stretch;
+            flex: 1;
+        }
+
+        body[data-layout="web"] .status-bar {
+            display: none;
         }
 
         .phone-screen {
@@ -798,7 +869,12 @@
         }
     </style>
 </head>
-<body>
+<body data-layout="mobile">
+    <div class="layout-toggle" aria-label="Layout">
+        <button type="button" class="layout-btn active" data-layout="mobile">Mobile</button>
+        <button type="button" class="layout-btn" data-layout="tablet">Tablet</button>
+        <button type="button" class="layout-btn" data-layout="web">Web</button>
+    </div>
     <div class="phone-container">
         <div class="phone-screen">
             <div class="status-bar">
@@ -848,10 +924,10 @@
                             <svg class="kpi-spark" id="kpiAvgDailySpark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 18 L20 14 L40 16 L60 8 L80 12" /></svg>
                         </div>
                         <div class="kpi-card">
-                            <div class="kpi-label">Customer Satisfaction</div>
-                            <div class="kpi-value">4.32 / 5.0</div>
-                            <div class="kpi-trend up">↑ +0.14 vs last mo.</div>
-                            <svg class="kpi-spark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 20 L20 18 L40 12 L60 10 L80 6" /></svg>
+                            <div class="kpi-label">Customer Signups</div>
+                            <div class="kpi-value" id="kpiCustomerSignupsValue">—</div>
+                            <div class="kpi-trend up" id="kpiCustomerSignupsTrend"></div>
+                            <svg class="kpi-spark" id="kpiCustomerSignupsSpark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 18 L20 14 L40 16 L60 8 L80 12" /></svg>
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label">Speed of Service</div>
@@ -958,6 +1034,21 @@
     </div>
 
     <script>
+        (function initLayoutToggle() {
+            const key = 'gleam-chat-layout';
+            const layout = localStorage.getItem(key) || 'mobile';
+            document.body.dataset.layout = layout;
+            document.querySelectorAll('.layout-btn').forEach(function(btn) {
+                btn.classList.toggle('active', btn.dataset.layout === layout);
+                btn.addEventListener('click', function() {
+                    const L = btn.dataset.layout;
+                    document.body.dataset.layout = L;
+                    localStorage.setItem(key, L);
+                    document.querySelectorAll('.layout-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.layout === L); });
+                });
+            });
+        })();
+
         let userAvatarUrl = '/images/carhartt-avatar.png';
         (async function initAuth() {
             const res = await fetch('/api/me');
@@ -1169,6 +1260,58 @@
         }
         loadAovKpi();
 
+        async function loadCustomerSignupsKpi() {
+            const valueEl = document.getElementById('kpiCustomerSignupsValue');
+            const trendEl = document.getElementById('kpiCustomerSignupsTrend');
+            if (!valueEl || !trendEl) return;
+            valueEl.textContent = 'Loading…';
+            trendEl.textContent = '';
+            try {
+                const res = await fetch('/api/kpis/customer-signups');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    valueEl.textContent = '—';
+                    valueEl.title = data.error || res.statusText || 'KPI unavailable';
+                    trendEl.textContent = 'Check console / Omni config';
+                    trendEl.className = 'kpi-trend down';
+                    console.warn('KPI Customer Signups:', data.error || res.statusText, data);
+                    return;
+                }
+                valueEl.title = '';
+                valueEl.textContent = data.valueFormatted != null ? data.valueFormatted : '—';
+                if (data.trendFormatted != null) {
+                    const isUp = (data.thisPeriodTotal != null && data.lastPeriodTotal != null) ? data.thisPeriodTotal >= data.lastPeriodTotal : true;
+                    trendEl.textContent = (isUp ? '↑ ' : '↓ ') + data.trendFormatted;
+                    trendEl.className = 'kpi-trend ' + (isUp ? 'up' : 'down');
+                } else {
+                    trendEl.textContent = 'vs last mo.';
+                    trendEl.className = 'kpi-trend up';
+                }
+                const sparkEl = document.getElementById('kpiCustomerSignupsSpark');
+                if (sparkEl && Array.isArray(data.dailyValues) && data.dailyValues.length > 0) {
+                    const vals = data.dailyValues;
+                    const min = Math.min(...vals);
+                    const max = Math.max(...vals);
+                    const range = max - min || 1;
+                    const w = 80, h = 24;
+                    const pts = vals.map((v, i) => {
+                        const x = vals.length === 1 ? w / 2 : (i / (vals.length - 1)) * w;
+                        const y = h - 4 - ((v - min) / range) * (h - 8);
+                        return `${x} ${y}`;
+                    });
+                    const path = sparkEl.querySelector('path');
+                    if (path) path.setAttribute('d', 'M' + pts.join(' L'));
+                }
+            } catch (e) {
+                valueEl.textContent = '—';
+                valueEl.title = e.message || 'Request failed';
+                trendEl.textContent = 'Network error';
+                trendEl.className = 'kpi-trend down';
+                console.warn('KPI Customer Signups:', e);
+            }
+        }
+        loadCustomerSignupsKpi();
+
         // Keep Omni and Gemini conversation IDs separate.
         let geminiConversationId = null;
         let omniConversationId = null;
@@ -1246,6 +1389,7 @@
                     loadAvgDailyTransactionsKpi();
                     loadSpeedOfServiceKpi();
                     loadAovKpi();
+                    loadCustomerSignupsKpi();
                 }
                 if (target === 'embed') {
                     loadEmbedUrl();
