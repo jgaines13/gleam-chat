@@ -103,9 +103,11 @@ async function getEmbedUserIdByExternalId(externalId) {
     }
     const resources = data.Resources ?? data.resources ?? [];
     const user = Array.isArray(resources) ? resources[0] : null;
-    return user?.id ? String(user.id) : null;
+    const id = user?.id ? String(user.id) : null;
+    if (!id) console.warn('[embed user lookup] No Omni embed user found for externalId=', externalId, '- ensure this user is provisioned in Omni with matching embedExternalId.');
+    return id;
   } catch (err) {
-    console.warn('[embed user lookup]', err.message);
+    console.warn('[embed user lookup]', externalId, err.message);
     return null;
   }
 }
@@ -177,19 +179,23 @@ app.post('/api/login', express.urlencoded({ extended: true }), async (req, res) 
     let omniUserId = embedResult.omniUserId;
     if (!omniUserId) {
       omniUserId = await getEmbedUserIdByExternalId(user.id);
-      if (omniUserId) req.session.omniUserId = omniUserId;
+      if (!omniUserId) {
+        await new Promise((r) => setTimeout(r, 800));
+        omniUserId = await getEmbedUserIdByExternalId(user.id);
+      }
+      req.session.omniUserId = omniUserId || null;
     } else {
       req.session.omniUserId = omniUserId;
     }
     if (embedResult.url) {
       req.session.omniEmbedUrl = embedResult.url;
-      console.log('[embed SSO] signed URL for', user.id, omniUserId ? `omniUserId=${omniUserId}` : '(lookup skipped or not found)', ':', embedResult.url);
+      console.log('[embed SSO] signed URL for', user.id, req.session.omniUserId ? `omniUserId=${req.session.omniUserId}` : '(no omniUserId)', ':', embedResult.url);
     }
   } else {
     req.session.omniEmbedUserId = null;
     req.session.omniUserId = null;
     req.session.omniEmbedUrl = null;
-    console.warn('[embed SSO]', embedResult.error, embedResult.status != null ? `(${embedResult.status})` : '');
+    console.warn('[embed SSO]', user.id, embedResult.error, embedResult.status != null ? `(${embedResult.status})` : '');
   }
   res.redirect('/');
 });
@@ -222,7 +228,11 @@ app.get('/api/embed-url', async (req, res) => {
   }
   let omniUserId = embedResult.omniUserId;
   if (!omniUserId) omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
-  if (omniUserId) req.session.omniUserId = omniUserId;
+  if (!omniUserId) {
+    await new Promise((r) => setTimeout(r, 800));
+    omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
+  }
+  req.session.omniUserId = omniUserId || req.session.omniUserId || null;
   console.log('[embed-url] serving fresh URL for', req.session.userId);
   res.set('Cache-Control', 'no-store');
   res.json({ url: embedResult.url });
@@ -476,12 +486,15 @@ function omniHeaders(options = {}) {
 
 /** Call Omni Queries API (run query, wait for results). Uses resultType: 'json' for easier parsing. */
 async function omniQueryRun(query, options = {}) {
-  const url = `${OMNI_BASE_URL}${OMNI_QUERY_PREFIX}/run`;
   const uid = options.mcpUserId != null ? String(options.mcpUserId).trim() : '';
+  let url = `${OMNI_BASE_URL}${OMNI_QUERY_PREFIX}/run`;
+  if (uid !== '') {
+    url += (url.includes('?') ? '&' : '?') + 'userId=' + encodeURIComponent(uid);
+  }
   const body = {
     query: typeof query === 'object' && query !== null ? query : null,
     resultType: 'json',
-    ...(uid !== '' ? { externalId: uid } : {}),
+    ...(uid !== '' ? { externalId: uid, userId: uid } : {}),
     ...options.body,
   };
   const res = await fetch(url, {
@@ -819,7 +832,6 @@ const SPEED_OF_SERVICE_QUERY = {
   ],
 };
 
-/** Parse numeric value (Omni time-to-ship is in days) */
 function parseDays(val) {
   if (val == null) return NaN;
   const n = typeof val === 'number' ? val : parseFloat(String(val).trim());
@@ -855,7 +867,6 @@ function parseSpeedOfServiceFromResult(data) {
   if (typeof first !== 'object' || first === null) return null;
 
   const keys = Object.keys(first);
-  // Match Omni column names: "Current Period", "Time to Ship Average", "Time To Ship Average", etc.
   const currentKey = keys.find((k) => /current period|time_to_ship|time to ship|ship average/i.test(k));
   const previousKey = keys.find((k) => /previous month|previous period/i.test(k));
   const periodKey = keys.find((k) => /^period$/i.test(k) || /pivot|omni_period/i.test(k));
@@ -922,6 +933,259 @@ function parseSpeedOfServiceFromResult(data) {
     trendFormatted,
     dailyValues,
     isImprovement: diffDays <= 0,
+  };
+}
+
+// --- KPI: Category MoM (largest % change by category, RLS via order_items_embed) ---
+const CATEGORY_MOM_QUERY = {
+  limit: 1000,
+  sorts: [
+    {
+      column_name: 'omni_dbt_ecomm__order_items.total_sale_price',
+      pivot_value_map: { omni_period_pivot: 'Current Period' },
+      sort_descending: true,
+    },
+    { column_name: 'omni_period_pivot', sort_descending: true },
+  ],
+  table: 'omni_dbt_ecomm__order_items',
+  fields: [
+    'omni_dbt_ecomm__products.category',
+    'omni_dbt_ecomm__order_items.total_sale_price',
+    'calc_1',
+    'omni_period_pivot',
+  ],
+  pivots: ['omni_period_pivot'],
+  dbtMode: false,
+  filters: {
+    'omni_dbt_ecomm__order_items.created_at': {
+      kind: 'BETWEEN',
+      type: 'date',
+      ui_type: 'BETWEEN',
+      isFiscal: false,
+      left_side: 'this month',
+      right_side: 'today',
+      is_negative: false,
+      offset_interval_string: null,
+    },
+    'omni_dbt_ecomm__order_items.order_id_count_distinct': {
+      is_inclusive: false,
+      is_negative: false,
+      kind: 'GREATER_THAN',
+      type: 'number',
+      values: ['3'],
+    },
+  },
+  modelId: '9c797066-b192-464e-ab1b-651b80ea0f91',
+  version: 8,
+  manualSort: true,
+  rewriteSql: true,
+  row_totals: {},
+  fill_fields: ['omni_dbt_ecomm__products.category', 'omni_period_pivot'],
+  calculations: [
+    {
+      label: 'Percent Change vs Previous',
+      format: 'PERCENT',
+      calc_name: 'calc_1',
+      outside_pivot: true,
+      sql_expression: {
+        type: 'call',
+        distinct: false,
+        operands: [
+          {
+            type: 'call',
+            distinct: false,
+            operands: [
+              {
+                type: 'call',
+                distinct: false,
+                operands: [
+                  { type: 'field', field_name: 'omni_dbt_ecomm__order_items.total_sale_price' },
+                  { type: 'literal', value: 0, string_value: '0' },
+                  { type: 'literal', value: 1, string_value: '1' },
+                ],
+                operator: 'Omni.OMNI_PIVOT_OFFSET',
+              },
+              {
+                type: 'call',
+                distinct: false,
+                operands: [
+                  { type: 'field', field_name: 'omni_dbt_ecomm__order_items.total_sale_price' },
+                  { type: 'literal', value: 0, string_value: '0' },
+                  { type: 'literal', value: 0, string_value: '0' },
+                ],
+                operator: 'Omni.OMNI_PIVOT_OFFSET',
+              },
+            ],
+            operator: 'Omni.OMNI_FX_MINUS',
+          },
+          {
+            type: 'call',
+            distinct: false,
+            operands: [
+              { type: 'field', field_name: 'omni_dbt_ecomm__order_items.total_sale_price' },
+              { type: 'literal', value: 0, string_value: '0' },
+              { type: 'literal', value: 0, string_value: '0' },
+            ],
+            operator: 'Omni.OMNI_PIVOT_OFFSET',
+          },
+        ],
+        operator: 'Omni.OMNI_FX_SAFE_DIVIDE',
+      },
+      swallow_errors: true,
+      original_formula: '=(PIVOTOFFSET(B1, 0, 1)-PIVOTOFFSET(B1, 0, 0))/PIVOTOFFSET(B1, 0, 0)',
+    },
+  ],
+  column_limit: 50,
+  join_via_map: {},
+  column_totals: {},
+  userEditedSQL: '',
+  dimensionIndex: 3,
+  default_group_by: true,
+  custom_summary_types: {},
+  join_paths_from_topic_name: 'order_items_embed',
+  period_over_period_computations: [
+    { periods_ago: null, time_unit_name: null, date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at' },
+    { periods_ago: 1, time_unit_name: 'MONTH', date_filter_field_name: 'omni_dbt_ecomm__order_items.created_at', is_dynamic_previous_period: false },
+  ],
+};
+
+function parsePercentChange(val) {
+  if (val == null) return NaN;
+  if (typeof val === 'number') return Number.isNaN(val) ? NaN : val;
+  const s = String(val).trim().replace(/%/g, '');
+  const n = parseFloat(s);
+  return Number.isNaN(n) ? NaN : n;
+}
+
+function parseCategoryMomFromResult(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  let raw = data.result ?? data;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  let rows = [];
+  let colNames = [];
+
+  if (Array.isArray(raw)) {
+    rows = raw;
+  } else if (raw && typeof raw === 'object' && !raw.rows && !raw.data) {
+    const numericKeys = Object.keys(raw).filter((k) => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b));
+    if (numericKeys.length) rows = numericKeys.map((k) => raw[k]);
+  }
+  if (!rows.length && raw && typeof raw === 'object') {
+    rows = raw.rows ?? raw.data ?? raw.result ?? [];
+    if (!Array.isArray(rows)) rows = [];
+  }
+
+  const columns = data.columns ?? (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw.columns : null);
+  if (Array.isArray(columns) && columns.length) {
+    colNames = columns.map((c) => {
+      if (typeof c === 'string') return c;
+      return c?.name ?? c?.label ?? c?.id ?? c?.field_name ?? '';
+    }).filter(Boolean);
+  }
+
+  if (Array.isArray(rows) && rows.length && colNames.length && Array.isArray(rows[0])) {
+    rows = rows.map((arr) => {
+      const obj = {};
+      colNames.forEach((col, i) => { if (col) obj[col] = arr[i]; });
+      return obj;
+    });
+  }
+
+  if (Array.isArray(rows) && rows.length && !colNames.length && Array.isArray(rows[0])) {
+    const firstArr = rows[0];
+    colNames = firstArr.map((_, i) => `Column_${i}`);
+    rows = rows.map((arr) => {
+      const obj = {};
+      arr.forEach((val, i) => { obj[colNames[i]] = val; });
+      return obj;
+    });
+  }
+
+  if (!rows.length) return null;
+
+  const first = rows[0];
+  if (typeof first !== 'object' || first === null) return null;
+
+  const keys = Object.keys(first);
+  const keyLower = (k) => String(k).toLowerCase();
+  const valStr = (v) => (v != null ? String(v).toLowerCase() : '');
+
+  let categoryKey = null;
+  let pctKey = null;
+  let dataRows = [];
+
+  const firstRowVals = keys.map((k) => valStr(first[k]));
+  const looksLikeHeaderRow = firstRowVals.some((v) => /category|percent change|total sale|period/i.test(v));
+  if (looksLikeHeaderRow && rows.length > 1) {
+    for (const k of keys) {
+      const v = valStr(first[k]);
+      if (/category/i.test(v)) categoryKey = k;
+      if (/percent change|calc_1|vs previous/i.test(v)) pctKey = k;
+    }
+    dataRows = rows.slice(1);
+  }
+
+  if (categoryKey == null || pctKey == null) {
+    if (categoryKey == null) categoryKey = keys.find((k) => /category/i.test(keyLower(k)));
+    if (pctKey == null) pctKey = keys.find((k) => /calc_1|percent|pct|% change|vs previous/i.test(keyLower(k)));
+    if (categoryKey == null && colNames.length) {
+      const catIdx = colNames.findIndex((c) => /category/i.test(String(c)));
+      if (catIdx >= 0) categoryKey = colNames[catIdx];
+    }
+    if (pctKey == null && colNames.length) {
+      const pctIdx = colNames.findIndex((c) => /calc_1|percent|pct|% change|vs previous/i.test(String(c).toLowerCase()));
+      if (pctIdx >= 0) pctKey = colNames[pctIdx];
+    }
+    if (categoryKey == null) categoryKey = keys.find((k) => /product|name|group|segment/i.test(keyLower(k)));
+    if (categoryKey == null && keys.length) categoryKey = keys[0];
+    if (pctKey == null && keys.length) pctKey = keys[keys.length - 1];
+    dataRows = rows.filter((row) => {
+      const cat = row[categoryKey];
+      const pct = parsePercentChange(row[pctKey]);
+      if (cat == null || String(cat).trim() === '') return false;
+      if (Number.isNaN(pct)) return false;
+      if (/total|^all$|^(null|undefined)$/i.test(String(cat).trim())) return false;
+      return true;
+    });
+  }
+
+  if (!dataRows.length) return null;
+
+  let topGainer = null;
+  let topDecliner = null;
+  for (const row of dataRows) {
+    const category = String(row[categoryKey]).trim();
+    const pct = parsePercentChange(row[pctKey]);
+    if (pct > (topGainer?.percentChange ?? -Infinity)) {
+      topGainer = { category, percentChange: pct };
+    }
+    if (pct < (topDecliner?.percentChange ?? Infinity)) {
+      topDecliner = { category, percentChange: pct };
+    }
+  }
+
+  const formatPct = (pct) => {
+    const sign = pct >= 0 ? '+' : '';
+    const value = Math.abs(pct) <= 1 ? pct * 100 : pct;
+    return `${sign}${Number(value).toFixed(1)}%`;
+  };
+
+  const valueFormatted = topGainer ? `${topGainer.category} ${formatPct(topGainer.percentChange)}` : '—';
+  const trendFormatted = topDecliner ? `${topDecliner.category} ${formatPct(topDecliner.percentChange)}` : null;
+
+  return {
+    valueFormatted,
+    trendFormatted,
+    topGainer: topGainer ? { category: topGainer.category, percentChange: topGainer.percentChange, formatted: formatPct(topGainer.percentChange) } : null,
+    topDecliner: topDecliner ? { category: topDecliner.category, percentChange: topDecliner.percentChange, formatted: formatPct(topDecliner.percentChange) } : null,
   };
 }
 
@@ -1313,12 +1577,20 @@ function parseAvgDailyTransactionsFromResult(data) {
   };
 }
 
+function kpiLogUser(req, label) {
+  const appUser = req.session?.userId ?? req.session?.username ?? '?';
+  const omniUserId = getOmniUserId(req.session);
+  console.log('[kpi]', label, 'appUser=', appUser, 'omniUserId=', omniUserId != null ? omniUserId : 'null');
+}
+
 app.get('/api/kpis/avg-daily-transactions', requireConfig, async (req, res) => {
   try {
+    kpiLogUser(req, 'avg-daily-transactions');
     const mcpUserId = getOmniUserId(req.session);
     const data = await omniQueryRun(AVG_DAILY_TRANSACTIONS_QUERY, { mcpUserId });
     const parsed = parseAvgDailyTransactionsFromResult(data);
     if (!parsed) {
+      console.error('[kpi] avg-daily-transactions parse failed for appUser=', req.session?.userId, 'rowCount=', Array.isArray(data?.result) ? data.result.length : (data?.result != null ? 'n/a' : 'no result'));
       return res.status(502).json({
         error: 'Could not parse KPI from Omni result',
         raw: data?.result != null ? { hasResult: true, rowCount: Array.isArray(data.result) ? data.result.length : 'n/a' } : data,
@@ -1335,8 +1607,45 @@ app.get('/api/kpis/avg-daily-transactions', requireConfig, async (req, res) => {
   }
 });
 
+app.get('/api/kpis/category-mom', requireConfig, async (req, res) => {
+  try {
+    kpiLogUser(req, 'category-mom');
+    const mcpUserId = getOmniUserId(req.session);
+    const data = await omniQueryRun(CATEGORY_MOM_QUERY, { mcpUserId });
+    const parsed = parseCategoryMomFromResult(data);
+    if (!parsed) {
+      const raw = data?.result ?? data;
+      const rows = Array.isArray(raw) ? raw : (raw?.rows ?? raw?.data ?? []);
+      const firstRow = Array.isArray(rows) ? rows[0] : null;
+      const dataKeys = data && typeof data === 'object' ? Object.keys(data) : [];
+      const sampleKeys = typeof firstRow === 'object' && firstRow !== null ? Object.keys(firstRow) : [];
+      const safeSample = firstRow != null && typeof firstRow === 'object'
+        ? Object.fromEntries(Object.entries(firstRow).slice(0, 8).map(([k, v]) => [k, v != null && typeof v === 'object' ? '[object]' : v]))
+        : firstRow;
+      console.error('[category-mom] Parse failed. appUser=', req.session?.userId, '| data keys:', dataKeys, '| result type:', Array.isArray(raw) ? 'array' : typeof raw, '| rowCount:', Array.isArray(rows) ? rows.length : 0, '| firstRow keys:', sampleKeys, '| data.columns:', data?.columns != null ? (Array.isArray(data.columns) ? data.columns.length : data.columns) : 'none', '| sample:', JSON.stringify(safeSample));
+      const fallback = {
+        valueFormatted: '—',
+        trendFormatted: null,
+        topGainer: null,
+        topDecliner: null,
+      };
+      return res.json(fallback);
+    }
+    res.json(parsed);
+  } catch (err) {
+    console.error('[category-mom] Error:', err.message, err.body ?? '');
+    const status = err.status || 500;
+    const message = err.message || 'Failed to load category MoM';
+    res.status(status).json({
+      error: message,
+      details: err.body,
+    });
+  }
+});
+
 app.get('/api/kpis/speed-of-service', requireConfig, async (req, res) => {
   try {
+    kpiLogUser(req, 'speed-of-service');
     const mcpUserId = getOmniUserId(req.session);
     const data = await omniQueryRun(SPEED_OF_SERVICE_QUERY, { mcpUserId });
     const parsed = parseSpeedOfServiceFromResult(data);
@@ -1345,6 +1654,7 @@ app.get('/api/kpis/speed-of-service', requireConfig, async (req, res) => {
       const rows = Array.isArray(raw) ? raw : (raw?.rows || raw?.data || []);
       const firstRow = rows[0];
       const sampleKeys = typeof firstRow === 'object' && firstRow !== null ? Object.keys(firstRow) : [];
+      console.error('[kpi] speed-of-service parse failed for appUser=', req.session?.userId, 'rowCount=', rows.length, 'firstRowKeys=', sampleKeys);
       return res.status(502).json({
         error: 'Could not parse Speed of Service from Omni result',
         debug: { rowCount: rows.length, firstRowKeys: sampleKeys, firstRowSample: firstRow },
@@ -1363,10 +1673,12 @@ app.get('/api/kpis/speed-of-service', requireConfig, async (req, res) => {
 
 app.get('/api/kpis/aov', requireConfig, async (req, res) => {
   try {
+    kpiLogUser(req, 'aov');
     const mcpUserId = getOmniUserId(req.session);
     const data = await omniQueryRun(AOV_QUERY, { mcpUserId });
     const parsed = parseAovFromResult(data);
     if (!parsed) {
+      console.error('[kpi] aov parse failed for appUser=', req.session?.userId);
       return res.status(502).json({
         error: 'Could not parse AOV from Omni result',
         raw: data?.result != null ? { hasResult: true, rowCount: Array.isArray(data.result) ? data.result.length : 'n/a' } : data,
@@ -1385,10 +1697,12 @@ app.get('/api/kpis/aov', requireConfig, async (req, res) => {
 
 app.get('/api/kpis/customer-signups', requireConfig, async (req, res) => {
   try {
+    kpiLogUser(req, 'customer-signups');
     const mcpUserId = getOmniUserId(req.session);
     const data = await omniQueryRun(CUSTOMER_SIGNUPS_QUERY, { mcpUserId });
     const parsed = parseCustomerSignupsFromResult(data);
     if (!parsed) {
+      console.error('[kpi] customer-signups parse failed for appUser=', req.session?.userId);
       return res.status(502).json({
         error: 'Could not parse Customer Signups from Omni result',
         raw: data?.result != null ? { hasResult: true, rowCount: Array.isArray(data.result) ? data.result.length : 'n/a' } : data,
@@ -1818,6 +2132,15 @@ async function drainChatQueue() {
   }
 }
 
+// In-memory progress for active chat (Omni job status messages); keyed by sessionID
+const chatProgressBySession = new Map();
+
+app.get('/api/chat/progress', (req, res) => {
+  const sessionId = req.sessionID;
+  const progress = sessionId ? chatProgressBySession.get(sessionId) : null;
+  res.json(progress && typeof progress === 'object' ? progress : {});
+});
+
 app.get('/api/chat/config', (req, res) => {
   const provider = process.env.GEMINI_PROVIDER || 'developer';
   res.json({
@@ -1830,12 +2153,15 @@ app.get('/api/chat/config', (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
+  const sessionId = req.sessionID;
   try {
     const { message, conversationId: incomingConversationId, debug, useCoordinator } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required and must be a string' });
     }
     const useGeminiCoordinator = useCoordinator !== false; // default true
+
+    if (sessionId) chatProgressBySession.set(sessionId, { message: 'Thinking…', state: null });
 
     if (!useGeminiCoordinator) {
       // Direct Omni path: no Gemini, single runOmniAnalysis call
@@ -1846,7 +2172,15 @@ app.post('/api/chat', async (req, res) => {
         });
       }
       const mcpUserId = getOmniUserId(req.session);
-      const result = await runOmniAnalysis(message.trim(), { mcpUserId });
+      const onEvent = (evt) => {
+        if (evt.type === 'omni_poll' && sessionId) {
+          chatProgressBySession.set(sessionId, {
+            message: evt.progress || 'Thinking…',
+            state: evt.state ?? null,
+          });
+        }
+      };
+      const result = await runOmniAnalysis(message.trim(), { mcpUserId, onEvent });
       const reply = result?.resultSummary || 'Analysis complete.';
       return res.json({ reply, conversationId: null });
     }
@@ -1862,9 +2196,15 @@ app.post('/api/chat', async (req, res) => {
     const conversationId = getConversationId(incomingConversationId);
     const history = loadHistory(conversationId);
     const trace = [];
-    const onEvent = debug
-      ? (evt) => trace.push({ ts: new Date().toISOString(), ...evt })
-      : null;
+    const onEvent = (evt) => {
+      if (evt.type === 'omni_poll' && sessionId) {
+        chatProgressBySession.set(sessionId, {
+          message: evt.progress || 'Thinking…',
+          state: evt.state ?? null,
+        });
+      }
+      if (debug) trace.push({ ts: new Date().toISOString(), ...evt });
+    };
     const mcpUserId = getOmniUserId(req.session);
     const { reply, history: newHistory } = await enqueueChat(() => coord.chat(message.trim(), history, { onEvent, mcpUserId }));
     saveHistory(conversationId, newHistory);
@@ -1874,6 +2214,8 @@ app.post('/api/chat', async (req, res) => {
     const msg = err?.message || 'Chat failed';
     const status = err?.status === 429 || /RESOURCE_EXHAUSTED|Resource exhausted/i.test(msg) ? 429 : 500;
     res.status(status).json({ error: msg });
+  } finally {
+    if (sessionId) chatProgressBySession.delete(sessionId);
   }
 });
 

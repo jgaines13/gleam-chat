@@ -291,6 +291,10 @@
             margin-bottom: 20px;
         }
 
+        body[data-layout="web"] .kpi-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
         .kpi-card {
             background: #fff;
             border: 1px solid #eee;
@@ -640,6 +644,11 @@
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
+        .typing-progress-message {
+            font-size: 12px;
+            color: #666;
+        }
+
         @keyframes typing {
             0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
             30% { transform: translateY(-6px); opacity: 1; }
@@ -931,8 +940,8 @@
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label">Speed of Service</div>
-                            <div class="kpi-value" id="kpiSpeedOfServiceValue">3:42 avg</div>
-                            <div class="kpi-trend up" id="kpiSpeedOfServiceTrend">↑ -8s vs last mo.</div>
+                            <div class="kpi-value" id="kpiSpeedOfServiceValue">—</div>
+                            <div class="kpi-trend up" id="kpiSpeedOfServiceTrend"></div>
                             <svg class="kpi-spark" id="kpiSpeedOfServiceSpark" viewBox="0 0 80 24" fill="none" stroke="#2e7d32" stroke-width="1.5"><path d="M0 8 L20 10 L40 12 L60 14 L80 16" /></svg>
                         </div>
                         <div class="kpi-card">
@@ -946,10 +955,10 @@
                     <div class="alert-card warning">
                         <div class="alert-header">
                             <span class="alert-icon">⚠️</span>
-                            <span class="alert-title">Speed of Delivery Alert</span>
+                            <span class="alert-title">Category MoM Alert</span>
                         </div>
-                        <div class="alert-body">6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.</div>
-                        <div class="ask-pulse-cta" onclick="switchToAskPulse('Can you give me more details on the speed of delivery alert? 6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.')">Ask Gleam for details →</div>
+                        <div class="alert-body" id="categoryMomAlertBody">Largest % gain and decline by category vs last month.</div>
+                        <div class="ask-pulse-cta" id="categoryMomAlertCta">Ask Gleam for details →</div>
                     </div>
 
                     <div class="alert-card success">
@@ -1208,6 +1217,37 @@
         }
         loadSpeedOfServiceKpi();
 
+        async function loadCategoryMomAlert() {
+            const alertBody = document.getElementById('categoryMomAlertBody');
+            const alertCta = document.getElementById('categoryMomAlertCta');
+            if (!alertBody) return;
+            try {
+                const res = await fetch('/api/kpis/category-mom', { credentials: 'include' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alertBody.textContent = 'Largest % gain and decline by category vs last month.';
+                    if (alertCta) alertCta.onclick = null;
+                    return;
+                }
+                const parts = [];
+                if (data.topGainer) parts.push(`${data.topGainer.category} led gains (${data.topGainer.formatted})`);
+                if (data.topDecliner) parts.push(`${data.topDecliner.category} led declines (${data.topDecliner.formatted})`);
+                const alertText = parts.length ? parts.join('. ') + '.' : 'Largest % gain and decline by category vs last month.';
+                alertBody.textContent = alertText;
+                const declineCategory = data.topDecliner?.category;
+                const gainCategory = data.topGainer?.category || 'this category';
+                if (alertCta) {
+                    alertCta.onclick = () => switchToAskPulse(
+                        declineCategory ? 'Why did ' + declineCategory + ' purchases decline?' : 'Why did ' + gainCategory + ' purchases increase?'
+                    );
+                }
+            } catch (e) {
+                alertBody.textContent = 'Largest % gain and decline by category vs last month.';
+                if (alertCta) alertCta.onclick = null;
+            }
+        }
+        loadCategoryMomAlert();
+
         async function loadAovKpi() {
             const valueEl = document.getElementById('kpiAovValue');
             const trendEl = document.getElementById('kpiAovTrend');
@@ -1390,6 +1430,7 @@
                     loadSpeedOfServiceKpi();
                     loadAovKpi();
                     loadCustomerSignupsKpi();
+                    loadCategoryMomAlert();
                 }
                 if (target === 'embed') {
                     loadEmbedUrl();
@@ -1524,6 +1565,8 @@
             return messageDiv;
         }
 
+        let progressPollInterval = null;
+
         function showTypingIndicator() {
             const typingDiv = document.createElement('div');
             typingDiv.className = 'message assistant';
@@ -1533,14 +1576,39 @@
             avatar.innerHTML = getGleamStarSvg();
             const indicator = document.createElement('div');
             indicator.className = 'typing-indicator';
+            indicator.dataset.content = 'dots';
             indicator.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
             typingDiv.appendChild(avatar);
             typingDiv.appendChild(indicator);
             chatContainer.appendChild(typingDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            if (progressPollInterval) clearInterval(progressPollInterval);
+            progressPollInterval = setInterval(async () => {
+                const el = document.getElementById('typingIndicator');
+                if (!el) return;
+                const content = el.querySelector('.typing-indicator');
+                if (!content) return;
+                try {
+                    const res = await fetch('/api/chat/progress', { credentials: 'include' });
+                    const data = await res.json().catch(() => ({}));
+                    const msg = data && typeof data.message === 'string' && data.message.trim();
+                    if (msg && content.dataset.content !== msg) {
+                        content.dataset.content = msg;
+                        content.innerHTML = `<div class="typing-progress-message">${escapeHtml(msg)}</div>`;
+                    } else if (!msg && content.dataset.content !== 'dots') {
+                        content.dataset.content = 'dots';
+                        content.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+                    }
+                } catch (_) {}
+            }, 400);
         }
 
         function removeTypingIndicator() {
+            if (progressPollInterval) {
+                clearInterval(progressPollInterval);
+                progressPollInterval = null;
+            }
             const el = document.getElementById('typingIndicator');
             if (el) el.remove();
         }
