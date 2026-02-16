@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gleam Pulse — Operators</title>
+    <title>Gleam Chat — Operators</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
@@ -698,6 +698,24 @@
             line-height: 1.35;
         }
 
+        .integration-hint-small {
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .integration-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #111;
+        }
+
+        .integration-toggle input {
+            margin: 0;
+        }
+
         .calendar-pill {
             display: inline-flex;
             align-items: center;
@@ -804,7 +822,7 @@
                                 <defs><linearGradient id="gleam_star_gradient" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
                             </svg>
                         </span>
-                        <span class="brand-font app-title">PULSE</span>
+                        <span class="brand-font app-title">CHAT</span>
                     </div>
                     <div class="user-avatar" id="headerUserAvatar">👤</div>
                 </div>
@@ -812,7 +830,7 @@
                 <div class="tabs">
                     <div class="tab active" data-tab="overview">Overview</div>
                     <div class="tab" data-tab="ask-pulse">Ask Gleam</div>
-                    <div class="tab" data-tab="embed">Embed</div>
+                    <div class="tab" data-tab="embed">Orders Dashboard</div>
                 </div>
             </div>
 
@@ -902,6 +920,16 @@
                     </div>
                     <div class="integrations-panel" id="integrationsPanel">
                         <div class="integration-row">
+                            <div class="integration-title">Ask Gleam mode</div>
+                            <label class="integration-toggle">
+                                <input type="checkbox" id="useCoordinatorEl" checked>
+                                <span class="integration-toggle-label">Use Gemini coordinator</span>
+                            </label>
+                        </div>
+                        <div class="integration-hint integration-hint-small">
+                            When on: Gemini coordinates tools (Omni, calendar, weather). When off: questions go directly to Omni only.
+                        </div>
+                        <div class="integration-row">
                             <div class="integration-title">Google Calendar</div>
                             <a class="debug-toggle" id="calendarConnect" href="/auth/google" target="_blank" rel="noopener">Connect</a>
                         </div>
@@ -958,6 +986,7 @@
         const debugToggle = document.getElementById('debugToggle');
         const debugClear = document.getElementById('debugClear');
         const debugEnabledEl = document.getElementById('debugEnabled');
+        const useCoordinatorEl = document.getElementById('useCoordinatorEl');
         const debugPanel = document.getElementById('debugPanel');
         const integrationsToggle = document.getElementById('integrationsToggle');
         const integrationsPanel = document.getElementById('integrationsPanel');
@@ -1380,14 +1409,15 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // Coordinator path: POST /api/chat (Gemini + tools). Fallback: direct Omni job.
+        // Coordinator path: POST /api/chat (Gemini + tools). Or direct Omni when useCoordinator is false.
         async function sendViaCoordinator(message) {
             const debug = Boolean(debugEnabledEl?.checked);
-            addDebug({ type: 'client_send_coordinator', debug, geminiConversationId });
+            const useCoordinator = useCoordinatorEl == null ? true : useCoordinatorEl.checked;
+            addDebug({ type: 'client_send_coordinator', debug, useCoordinator, geminiConversationId });
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message, conversationId: geminiConversationId, debug }),
+                body: JSON.stringify({ message, conversationId: geminiConversationId, debug, useCoordinator }),
             });
             if (response.status === 503) return null;
             if (!response.ok) {
@@ -1409,6 +1439,7 @@
             const response = await fetch('/api/agentic/jobs', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
                     prompt,
                     conversationId: omniConversationId || undefined,
@@ -1424,7 +1455,7 @@
         }
 
         async function pollJobStatus(jobId) {
-            const response = await fetch(`/api/agentic/jobs/${jobId}`);
+            const response = await fetch(`/api/agentic/jobs/${jobId}`, { credentials: 'include' });
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error || 'Failed to get job status');
@@ -1433,7 +1464,7 @@
         }
 
         async function getJobResult(jobId) {
-            const response = await fetch(`/api/agentic/jobs/${jobId}/result`);
+            const response = await fetch(`/api/agentic/jobs/${jobId}/result`, { credentials: 'include' });
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error || 'Failed to get result');

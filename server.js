@@ -16,6 +16,7 @@ const OMNI_BASE_URL = (process.env.OMNI_BASE_URL || '').replace(/\/$/, '');
 const OMNI_MODEL_ID = process.env.OMNI_MODEL_ID;
 const OMNI_BRANCH_ID = process.env.OMNI_BRANCH_ID;
 const OMNI_TOPIC_NAME = process.env.OMNI_TOPIC_NAME;
+const OMNI_TOPIC_NAME_EMBED = process.env.OMNI_TOPIC_NAME_EMBED || '';
 const OMNI_EMBED_SECRET = process.env.OMNI_EMBED_SECRET || '';
 const OMNI_CONTENT_PATH = process.env.OMNI_CONTENT_PATH || '/embed';
 const OMNI_EMBED_SSO_URL =
@@ -80,7 +81,39 @@ async function generateOmniEmbedUrl({ externalId, name, userAttributes = {} }) {
   if (!res.ok) {
     return { ok: false, error: data.error || data.message || res.statusText || String(res.status), status: res.status };
   }
-  return { ok: true, url: data.url, data };
+  const omniUserId = data.userId ?? data.user_id ?? data.embedUserId ?? null;
+  return { ok: true, url: data.url, omniUserId: omniUserId != null ? String(omniUserId) : null, data };
+}
+
+/** Fetch Omni embed user id by externalId via SCIM list (filter by embedExternalId). See https://docs.omni.co/api/users/retrieve-embed-user */
+async function getEmbedUserIdByExternalId(externalId) {
+  if (!OMNI_API_KEY || !OMNI_BASE_URL) return null;
+  const filter = `embedExternalId eq "${String(externalId).replace(/"/g, '\\"')}"`;
+  const url = `${OMNI_BASE_URL}/scim/v2/embed/users?filter=${encodeURIComponent(filter)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${OMNI_API_KEY}`, 'Accept': 'application/json' },
+    });
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      return null;
+    }
+    const resources = data.Resources ?? data.resources ?? [];
+    const user = Array.isArray(resources) ? resources[0] : null;
+    return user?.id ? String(user.id) : null;
+  } catch (err) {
+    console.warn('[embed user lookup]', err.message);
+    return null;
+  }
+}
+
+/** Omni user ID for API calls (userId query param, headers). Use only when we have a real Omni user id — passing app userId (e.g. levis) can cause Omni "Application DB error". */
+function getOmniUserId(session) {
+  if (session?.omniUserId != null && String(session.omniUserId).trim() !== '') return String(session.omniUserId).trim();
+  return null;
 }
 
 app.use(
@@ -141,12 +174,20 @@ app.post('/api/login', express.urlencoded({ extended: true }), async (req, res) 
   });
   if (embedResult.ok) {
     req.session.omniEmbedUserId = user.id;
+    let omniUserId = embedResult.omniUserId;
+    if (!omniUserId) {
+      omniUserId = await getEmbedUserIdByExternalId(user.id);
+      if (omniUserId) req.session.omniUserId = omniUserId;
+    } else {
+      req.session.omniUserId = omniUserId;
+    }
     if (embedResult.url) {
       req.session.omniEmbedUrl = embedResult.url;
-      console.log('[embed SSO] signed URL for', user.id, ':', embedResult.url);
+      console.log('[embed SSO] signed URL for', user.id, omniUserId ? `omniUserId=${omniUserId}` : '(lookup skipped or not found)', ':', embedResult.url);
     }
   } else {
     req.session.omniEmbedUserId = null;
+    req.session.omniUserId = null;
     req.session.omniEmbedUrl = null;
     console.warn('[embed SSO]', embedResult.error, embedResult.status != null ? `(${embedResult.status})` : '');
   }
@@ -179,6 +220,9 @@ app.get('/api/embed-url', async (req, res) => {
     console.warn('[embed-url] generate failed for', req.session.userId, embedResult.error);
     return res.status(502).json({ error: embedResult.error || 'Could not generate embed URL', url: null });
   }
+  let omniUserId = embedResult.omniUserId;
+  if (!omniUserId) omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
+  if (omniUserId) req.session.omniUserId = omniUserId;
   console.log('[embed-url] serving fresh URL for', req.session.userId);
   res.set('Cache-Control', 'no-store');
   res.json({ url: embedResult.url });
@@ -414,20 +458,35 @@ function requireConfig(req, res, next) {
 const OMNI_API_PREFIX = '/v1/agentic';
 const OMNI_QUERY_PREFIX = '/v1/query';
 
+/** Build Omni API headers; when mcpUserId is set, add RLS headers for embed user. */
+function omniHeaders(options = {}) {
+  const h = {
+    'Authorization': `Bearer ${OMNI_API_KEY}`,
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  const uid = options.mcpUserId != null ? String(options.mcpUserId).trim() : '';
+  if (uid !== '') {
+    h['MCP-User-Id'] = uid;
+    h['MCP-User-Required'] = 'true';
+    h['X-Omni-External-Id'] = uid;
+  }
+  return h;
+}
+
 /** Call Omni Queries API (run query, wait for results). Uses resultType: 'json' for easier parsing. */
 async function omniQueryRun(query, options = {}) {
   const url = `${OMNI_BASE_URL}${OMNI_QUERY_PREFIX}/run`;
+  const uid = options.mcpUserId != null ? String(options.mcpUserId).trim() : '';
   const body = {
     query: typeof query === 'object' && query !== null ? query : null,
     resultType: 'json',
+    ...(uid !== '' ? { externalId: uid } : {}),
     ...options.body,
   };
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OMNI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers: omniHeaders(options),
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -448,10 +507,7 @@ async function omniQueryRun(query, options = {}) {
       const waitUrl = `${OMNI_BASE_URL}${OMNI_QUERY_PREFIX}/wait`;
       const waitRes = await fetch(waitUrl, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OMNI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: omniHeaders(options),
         body: JSON.stringify({ job_ids: jobIds }),
       });
       const waitText = await waitRes.text();
@@ -487,12 +543,13 @@ async function omniQueryRun(query, options = {}) {
 
 async function omniFetch(pathname, options = {}) {
   const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
-  const url = `${OMNI_BASE_URL}${OMNI_API_PREFIX}${path}`;
-  const headers = {
-    'Authorization': `Bearer ${OMNI_API_KEY}`,
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+  let url = `${OMNI_BASE_URL}${OMNI_API_PREFIX}${path}`;
+  const uid = options.mcpUserId != null ? String(options.mcpUserId).trim() : '';
+  if (uid !== '') {
+    const sep = url.includes('?') ? '&' : '?';
+    url += sep + 'userId=' + encodeURIComponent(uid);
+  }
+  const headers = omniHeaders(options);
   const res = await fetch(url, { ...options, headers });
   const text = await res.text();
   let body;
@@ -518,6 +575,7 @@ app.post('/api/agentic/jobs', requireConfig, async (req, res) => {
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt is required and must be a string' });
     }
+    const mcpUserId = getOmniUserId(req.session);
     const payload = {
       prompt: prompt.trim(),
       modelId: OMNI_MODEL_ID,
@@ -525,11 +583,16 @@ app.post('/api/agentic/jobs', requireConfig, async (req, res) => {
     if (OMNI_BRANCH_ID) payload.branchId = OMNI_BRANCH_ID;
     if (conversationId) payload.conversationId = conversationId;
     if (topicName != null) payload.topicName = String(topicName).slice(0, 256);
-    if (OMNI_TOPIC_NAME && !topicName) payload.topicName = OMNI_TOPIC_NAME;
-
+    if (!payload.topicName) {
+      payload.topicName = (mcpUserId && OMNI_TOPIC_NAME_EMBED) ? OMNI_TOPIC_NAME_EMBED : (OMNI_TOPIC_NAME || null);
+    }
+    if (payload.topicName == null) delete payload.topicName;
+    if (mcpUserId) payload.externalId = mcpUserId;
+    if (mcpUserId) console.log('[agentic] POST /jobs with user context:', mcpUserId);
     const result = await omniFetch('/jobs', {
       method: 'POST',
       body: JSON.stringify(payload),
+      mcpUserId,
     });
     res.status(201).json(result);
   } catch (err) {
@@ -548,7 +611,8 @@ app.post('/api/agentic/jobs', requireConfig, async (req, res) => {
 app.get('/api/agentic/jobs/:jobId', requireConfig, async (req, res) => {
   try {
     const { jobId } = req.params;
-    const result = await omniFetch(`/jobs/${encodeURIComponent(jobId)}`);
+    const mcpUserId = getOmniUserId(req.session);
+    const result = await omniFetch(`/jobs/${encodeURIComponent(jobId)}`, { mcpUserId });
     res.json(result);
   } catch (err) {
     const status = err.status || 500;
@@ -563,7 +627,8 @@ app.get('/api/agentic/jobs/:jobId', requireConfig, async (req, res) => {
 app.get('/api/agentic/jobs/:jobId/result', requireConfig, async (req, res) => {
   try {
     const { jobId } = req.params;
-    const result = await omniFetch(`/jobs/${encodeURIComponent(jobId)}/result`);
+    const mcpUserId = getOmniUserId(req.session);
+    const result = await omniFetch(`/jobs/${encodeURIComponent(jobId)}/result`, { mcpUserId });
     res.json(result);
   } catch (err) {
     const status = err.status || 500;
@@ -578,8 +643,10 @@ app.get('/api/agentic/jobs/:jobId/result', requireConfig, async (req, res) => {
 app.post('/api/agentic/jobs/:jobId/cancel', requireConfig, async (req, res) => {
   try {
     const { jobId } = req.params;
+    const mcpUserId = getOmniUserId(req.session);
     const result = await omniFetch(`/jobs/${encodeURIComponent(jobId)}/cancel`, {
       method: 'POST',
+      mcpUserId,
     });
     res.json(result);
   } catch (err) {
@@ -595,17 +662,21 @@ app.post('/api/agentic/jobs/:jobId/cancel', requireConfig, async (req, res) => {
 
 async function runOmniAnalysis(prompt, opts = {}) {
   const onEvent = typeof opts.onEvent === 'function' ? opts.onEvent : null;
+  const mcpUserId = opts.mcpUserId != null ? String(opts.mcpUserId).trim() || null : null;
   const payload = {
     prompt: String(prompt).trim(),
     modelId: OMNI_MODEL_ID,
   };
   if (OMNI_BRANCH_ID) payload.branchId = OMNI_BRANCH_ID;
-  if (OMNI_TOPIC_NAME) payload.topicName = OMNI_TOPIC_NAME;
+  payload.topicName = (mcpUserId && OMNI_TOPIC_NAME_EMBED) ? OMNI_TOPIC_NAME_EMBED : (OMNI_TOPIC_NAME || null);
+  if (!payload.topicName) delete payload.topicName;
+  if (mcpUserId) payload.externalId = mcpUserId;
 
   onEvent?.({ type: 'omni_submit', modelId: OMNI_MODEL_ID });
   const { jobId } = await omniFetch('/jobs', {
     method: 'POST',
     body: JSON.stringify(payload),
+    mcpUserId,
   });
   onEvent?.({ type: 'omni_job_created', jobId });
 
@@ -614,10 +685,10 @@ async function runOmniAnalysis(prompt, opts = {}) {
 
   for (let i = 0; i < maxPolls; i++) {
     await new Promise((r) => setTimeout(r, i === 0 ? 400 : pollIntervalMs));
-    const status = await omniFetch(`/jobs/${jobId}`);
+    const status = await omniFetch(`/jobs/${jobId}`, { mcpUserId });
     onEvent?.({ type: 'omni_poll', jobId, state: status.state, progress: status.progress?.message || null });
     if (status.state === 'COMPLETE') {
-      const result = await omniFetch(`/jobs/${jobId}/result`);
+      const result = await omniFetch(`/jobs/${jobId}/result`, { mcpUserId });
       onEvent?.({ type: 'omni_complete', jobId });
       const actions = Array.isArray(result.actions) ? result.actions : [];
       const firstQuery =
@@ -648,20 +719,20 @@ async function runOmniAnalysis(prompt, opts = {}) {
   throw new Error('Omni job timed out');
 }
 
-// --- KPI: Avg Daily Transactions (Omni run-query) ---
+// --- KPI: Avg Daily Transactions (Omni run-query, RLS via order_items_embed) ---
 const AVG_DAILY_TRANSACTIONS_QUERY = {
   limit: 1000,
-  sorts: [{ column_name: 'order_items.created_at[date]', sort_descending: false }],
-  table: 'order_items',
+  sorts: [{ column_name: 'order_items_embed.created_at[date]', sort_descending: false }],
+  table: 'order_items_embed',
   fields: [
-    'order_items.created_at[date]',
+    'order_items_embed.created_at[date]',
     'omni_period_pivot',
-    'order_items.total_orders',
+    'order_items_embed.total_orders',
   ],
   pivots: ['omni_period_pivot'],
   dbtMode: false,
   filters: {
-    'order_items.created_at': {
+    'order_items_embed.created_at': {
       isFiscal: false,
       is_negative: false,
       kind: 'BETWEEN',
@@ -671,7 +742,7 @@ const AVG_DAILY_TRANSACTIONS_QUERY = {
       ui_type: 'BETWEEN',
       offset_interval_string: null,
     },
-    'order_items.status': {
+    'order_items_embed.status': {
       kind: 'EQUALS',
       type: 'string',
       values: ['Returned', 'Cancelled'],
@@ -691,14 +762,14 @@ const AVG_DAILY_TRANSACTIONS_QUERY = {
   dimensionIndex: 2,
   default_group_by: true,
   custom_summary_types: {},
-  join_paths_from_topic_name: 'order_items',
+  join_paths_from_topic_name: 'order_items_embed',
   period_over_period_computations: [
-    { date_filter_field_name: 'order_items.created_at', periods_ago: null, time_unit_name: null },
-    { date_filter_field_name: 'order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+    { date_filter_field_name: 'order_items_embed.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'order_items_embed.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
   ],
 };
 
-// --- KPI: Speed of Service (time to ship average) ---
+// --- KPI: Speed of Service (time to ship average, RLS via order_items_embed) ---
 const SPEED_OF_SERVICE_QUERY = {
   column_limit: 50,
   dbtMode: false,
@@ -712,13 +783,13 @@ const SPEED_OF_SERVICE_QUERY = {
   custom_summary_types: {},
   dimensionIndex: 2,
   fields: [
-    'order_items.created_at[date]',
+    'order_items_embed.created_at[date]',
     'omni_period_pivot',
-    'order_items.time_to_ship_average',
+    'order_items_embed.time_to_ship_average',
   ],
   fill_fields: [],
   filters: {
-    'order_items.created_at': {
+    'order_items_embed.created_at': {
       isFiscal: false,
       is_negative: false,
       kind: 'BETWEEN',
@@ -728,7 +799,7 @@ const SPEED_OF_SERVICE_QUERY = {
       offset_interval_string: null,
       right_side: 'today',
     },
-    'order_items.status': {
+    'order_items_embed.status': {
       type: 'string',
       kind: 'EQUALS',
       values: ['Returned', 'Cancelled'],
@@ -738,13 +809,13 @@ const SPEED_OF_SERVICE_QUERY = {
   join_via_map: {},
   pivots: ['omni_period_pivot'],
   row_totals: {},
-  sorts: [{ column_name: 'order_items.created_at[date]', sort_descending: false }],
-  table: 'order_items',
+  sorts: [{ column_name: 'order_items_embed.created_at[date]', sort_descending: false }],
+  table: 'order_items_embed',
   version: 8,
-  join_paths_from_topic_name: 'order_items',
+  join_paths_from_topic_name: 'order_items_embed',
   period_over_period_computations: [
-    { date_filter_field_name: 'order_items.created_at', periods_ago: null, time_unit_name: null },
-    { date_filter_field_name: 'order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+    { date_filter_field_name: 'order_items_embed.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'order_items_embed.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
   ],
 };
 
@@ -854,7 +925,7 @@ function parseSpeedOfServiceFromResult(data) {
   };
 }
 
-// --- KPI: AOV (average sale price) ---
+// --- KPI: AOV (average sale price, RLS via order_items_embed) ---
 const AOV_QUERY = {
   column_limit: 50,
   dbtMode: false,
@@ -868,13 +939,13 @@ const AOV_QUERY = {
   custom_summary_types: {},
   dimensionIndex: 2,
   fields: [
-    'order_items.created_at[date]',
+    'order_items_embed.created_at[date]',
     'omni_period_pivot',
-    'order_items.average_sale_price',
+    'order_items_embed.average_sale_price',
   ],
   fill_fields: [],
   filters: {
-    'order_items.created_at': {
+    'order_items_embed.created_at': {
       isFiscal: false,
       is_negative: false,
       kind: 'BETWEEN',
@@ -884,7 +955,7 @@ const AOV_QUERY = {
       offset_interval_string: null,
       right_side: 'today',
     },
-    'order_items.status': {
+    'order_items_embed.status': {
       type: 'string',
       kind: 'EQUALS',
       values: ['Returned', 'Cancelled'],
@@ -894,13 +965,13 @@ const AOV_QUERY = {
   join_via_map: {},
   pivots: ['omni_period_pivot'],
   row_totals: {},
-  sorts: [{ column_name: 'order_items.created_at[date]', sort_descending: false }],
-  table: 'order_items',
+  sorts: [{ column_name: 'order_items_embed.created_at[date]', sort_descending: false }],
+  table: 'order_items_embed',
   version: 8,
-  join_paths_from_topic_name: 'order_items',
+  join_paths_from_topic_name: 'order_items_embed',
   period_over_period_computations: [
-    { date_filter_field_name: 'order_items.created_at', periods_ago: null, time_unit_name: null },
-    { date_filter_field_name: 'order_items.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
+    { date_filter_field_name: 'order_items_embed.created_at', periods_ago: null, time_unit_name: null },
+    { date_filter_field_name: 'order_items_embed.created_at', is_dynamic_previous_period: false, periods_ago: 1, time_unit_name: 'MONTH' },
   ],
 };
 
@@ -1102,7 +1173,8 @@ function parseAvgDailyTransactionsFromResult(data) {
 
 app.get('/api/kpis/avg-daily-transactions', requireConfig, async (req, res) => {
   try {
-    const data = await omniQueryRun(AVG_DAILY_TRANSACTIONS_QUERY);
+    const mcpUserId = getOmniUserId(req.session);
+    const data = await omniQueryRun(AVG_DAILY_TRANSACTIONS_QUERY, { mcpUserId });
     const parsed = parseAvgDailyTransactionsFromResult(data);
     if (!parsed) {
       return res.status(502).json({
@@ -1123,7 +1195,8 @@ app.get('/api/kpis/avg-daily-transactions', requireConfig, async (req, res) => {
 
 app.get('/api/kpis/speed-of-service', requireConfig, async (req, res) => {
   try {
-    const data = await omniQueryRun(SPEED_OF_SERVICE_QUERY);
+    const mcpUserId = getOmniUserId(req.session);
+    const data = await omniQueryRun(SPEED_OF_SERVICE_QUERY, { mcpUserId });
     const parsed = parseSpeedOfServiceFromResult(data);
     if (!parsed) {
       const raw = data?.result ?? data;
@@ -1148,7 +1221,8 @@ app.get('/api/kpis/speed-of-service', requireConfig, async (req, res) => {
 
 app.get('/api/kpis/aov', requireConfig, async (req, res) => {
   try {
-    const data = await omniQueryRun(AOV_QUERY);
+    const mcpUserId = getOmniUserId(req.session);
+    const data = await omniQueryRun(AOV_QUERY, { mcpUserId });
     const parsed = parseAovFromResult(data);
     if (!parsed) {
       return res.status(502).json({
@@ -1497,7 +1571,7 @@ function getCoordinator() {
       // Lazily require so Omni-only mode works without Gemini deps installed.
       const { createCoordinator } = require('./lib/coordinator');
       coordinator = createCoordinator({
-        runOmniAnalysis: (prompt) => runOmniAnalysis(prompt),
+        runOmniAnalysis: (prompt, opts) => runOmniAnalysis(prompt, opts),
         weatherGetForecast: (location, opts) => weatherGetForecast(location, opts),
         calendarListEvents: (args, opts) => calendarListEvents(args, opts),
         calendarCreateEvent: (args, opts) => calendarCreateEvent(args, opts),
@@ -1593,10 +1667,27 @@ app.get('/api/chat/config', (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, conversationId: incomingConversationId, debug } = req.body;
+    const { message, conversationId: incomingConversationId, debug, useCoordinator } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required and must be a string' });
     }
+    const useGeminiCoordinator = useCoordinator !== false; // default true
+
+    if (!useGeminiCoordinator) {
+      // Direct Omni path: no Gemini, single runOmniAnalysis call
+      if (!OMNI_API_KEY || !OMNI_BASE_URL || !OMNI_MODEL_ID) {
+        return res.status(503).json({
+          error: 'Omni not configured',
+          message: 'Set OMNI_API_KEY, OMNI_BASE_URL, and OMNI_MODEL_ID for direct Omni mode.',
+        });
+      }
+      const mcpUserId = getOmniUserId(req.session);
+      const result = await runOmniAnalysis(message.trim(), { mcpUserId });
+      const reply = result?.resultSummary || 'Analysis complete.';
+      return res.json({ reply, conversationId: null });
+    }
+
+    // Gemini coordinator path
     const coord = getCoordinator();
     if (!coord) {
       return res.status(503).json({
@@ -1610,7 +1701,8 @@ app.post('/api/chat', async (req, res) => {
     const onEvent = debug
       ? (evt) => trace.push({ ts: new Date().toISOString(), ...evt })
       : null;
-    const { reply, history: newHistory } = await enqueueChat(() => coord.chat(message.trim(), history, { onEvent }));
+    const mcpUserId = getOmniUserId(req.session);
+    const { reply, history: newHistory } = await enqueueChat(() => coord.chat(message.trim(), history, { onEvent, mcpUserId }));
     saveHistory(conversationId, newHistory);
     res.json({ reply, conversationId, debug: debug ? trace : undefined });
   } catch (err) {

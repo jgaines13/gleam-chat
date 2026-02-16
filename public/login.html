@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Log in · Pulse</title>
+  <title>Log in · Chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -27,12 +27,31 @@
       width: 100%;
       max-width: 360px;
     }
-    .logo {
-      font-family: Montserrat, sans-serif;
-      font-weight: 700;
-      font-size: 24px;
-      color: #333;
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       margin-bottom: 8px;
+    }
+    .logo-row .gleam-logo {
+      height: 24px;
+      width: auto;
+      flex-shrink: 0;
+      display: block;
+      color: #000;
+    }
+    .logo-row .gleam-logo svg {
+      height: 100%;
+      width: auto;
+      display: block;
+    }
+    .logo-row .brand-font {
+      font-family: Montserrat, sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #000;
     }
     .sub {
       font-size: 14px;
@@ -84,7 +103,16 @@
 </head>
 <body>
   <div class="card">
-    <div class="logo">PULSE</div>
+    <div class="logo-row">
+      <span class="gleam-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="#E25353"/>
+          <path d="M23 12.006C16.4496 13.3248 12.6469 17.0997 11.5429 23.5C10.3899 17.0392 6.57493 13.2401 0 12.006C6.5872 10.7478 10.4021 6.93661 11.5307 0.5C12.6469 6.85192 16.4128 10.6752 23 12.006Z" fill="url(#gleam_star_login)"/>
+          <defs><linearGradient id="gleam_star_login" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
+        </svg>
+      </span>
+      <span class="brand-font">Gleam CHAT</span>
+    </div>
     <div class="sub">Sign in to your account</div>
 
     <div id="errorBox" class="error" style="display: none;"></div>
