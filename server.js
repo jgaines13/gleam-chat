@@ -16,6 +16,11 @@ const OMNI_BASE_URL = (process.env.OMNI_BASE_URL || '').replace(/\/$/, '');
 const OMNI_MODEL_ID = process.env.OMNI_MODEL_ID;
 const OMNI_BRANCH_ID = process.env.OMNI_BRANCH_ID;
 const OMNI_TOPIC_NAME = process.env.OMNI_TOPIC_NAME;
+const OMNI_EMBED_SECRET = process.env.OMNI_EMBED_SECRET || '';
+const OMNI_CONTENT_PATH = process.env.OMNI_CONTENT_PATH || '/embed';
+const OMNI_EMBED_SSO_URL =
+  process.env.OMNI_EMBED_SSO_URL ||
+  (OMNI_BASE_URL ? OMNI_BASE_URL.replace(/\/api\/?$/, '') + '/embed/sso/generate-url' : '');
 
 app.use(express.json());
 
@@ -44,6 +49,40 @@ async function findUserByUsername(username) {
   return data.users.find((x) => x.username.toLowerCase() === u) || null;
 }
 
+/** Call Omni embed SSO API to generate a signed embed URL (and provision embed user for RLS). */
+async function generateOmniEmbedUrl({ externalId, name, userAttributes = {} }) {
+  if (!OMNI_EMBED_SECRET || !OMNI_EMBED_SSO_URL) {
+    return { ok: false, error: 'Embed SSO not configured (OMNI_EMBED_SECRET / OMNI_EMBED_SSO_URL)' };
+  }
+  const userAttributesJson = JSON.stringify(userAttributes);
+  const body = {
+    secret: OMNI_EMBED_SECRET,
+    contentPath: OMNI_CONTENT_PATH,
+    externalId: String(externalId),
+    name: String(name),
+    userAttributes: encodeURIComponent(userAttributesJson),
+  };
+  console.log('[embed SSO] request to', OMNI_EMBED_SSO_URL, '| contentPath:', OMNI_CONTENT_PATH, '| externalId:', externalId, '| name:', name, '| userAttributes (raw):', userAttributesJson, '| userAttributes (encoded):', body.userAttributes);
+  const res = await fetch(OMNI_EMBED_SSO_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
+  }
+  console.log('[embed SSO] response status:', res.status, '| url present:', !!data.url, '| url query (userAttributes):', data.url ? (data.url.includes('userAttributes') ? 'yes' : 'NO') : 'n/a');
+  if (data.url) console.log('[embed SSO] full signed URL:', data.url);
+  if (!res.ok) {
+    return { ok: false, error: data.error || data.message || res.statusText || String(res.status), status: res.status };
+  }
+  return { ok: true, url: data.url, data };
+}
+
 app.use(
   session({
     secret: SESSION_SECRET,
@@ -53,6 +92,13 @@ app.use(
     cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
   })
 );
+
+app.use((req, res, next) => {
+  if (req.method === 'GET' && req.path === '/api/embed-url') {
+    console.log('[embed-url] GET /api/embed-url requested (see server terminal)');
+  }
+  next();
+});
 
 function requireAuth(req, res, next) {
   const allowed =
@@ -88,6 +134,22 @@ app.post('/api/login', express.urlencoded({ extended: true }), async (req, res) 
   req.session.profile = user.profile;
   req.session.displayName = user.displayName;
   req.session.username = user.username;
+  const embedResult = await generateOmniEmbedUrl({
+    externalId: user.id,
+    name: user.displayName,
+    userAttributes: { brand: user.displayName, is_internal: 'false' },
+  });
+  if (embedResult.ok) {
+    req.session.omniEmbedUserId = user.id;
+    if (embedResult.url) {
+      req.session.omniEmbedUrl = embedResult.url;
+      console.log('[embed SSO] signed URL for', user.id, ':', embedResult.url);
+    }
+  } else {
+    req.session.omniEmbedUserId = null;
+    req.session.omniEmbedUrl = null;
+    console.warn('[embed SSO]', embedResult.error, embedResult.status != null ? `(${embedResult.status})` : '');
+  }
   res.redirect('/');
 });
 
@@ -100,6 +162,26 @@ app.get('/api/me', (req, res) => {
     displayName: req.session.displayName,
     username: req.session.username,
   });
+});
+
+app.get('/api/embed-url', async (req, res) => {
+  console.log('[embed-url] GET /api/embed-url hit (check server terminal for this log)');
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  // Generate a fresh signed URL on each request; Omni's embed URL is one-time-use, so reusing causes 403.
+  const embedResult = await generateOmniEmbedUrl({
+    externalId: req.session.userId,
+    name: req.session.displayName || req.session.userId,
+    userAttributes: { brand: req.session.displayName || req.session.userId, is_internal: 'false' },
+  });
+  if (!embedResult.ok || !embedResult.url) {
+    console.warn('[embed-url] generate failed for', req.session.userId, embedResult.error);
+    return res.status(502).json({ error: embedResult.error || 'Could not generate embed URL', url: null });
+  }
+  console.log('[embed-url] serving fresh URL for', req.session.userId);
+  res.set('Cache-Control', 'no-store');
+  res.json({ url: embedResult.url });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -1544,7 +1626,7 @@ app.post('/api/chat', async (req, res) => {
   app.listen(PORT, () => {
     console.log(`Pulse app running at http://localhost:${PORT}`);
     if (!OMNI_API_KEY || !OMNI_BASE_URL || !OMNI_MODEL_ID) {
-      console.warn('Warning: Set OMNI_API_KEY, OMNI_BASE_URL, and OMNI_MODEL_ID in .env to use Ask Pulse.');
+      console.warn('Warning: Set OMNI_API_KEY, OMNI_BASE_URL, and OMNI_MODEL_ID in .env to use Ask Gleam.');
     }
     if (!process.env.GEMINI_API_KEY) {
     console.warn('Warning: Set GEMINI_API_KEY in .env to use the Gemini coordinator (POST /api/chat).');

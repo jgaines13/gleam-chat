@@ -2,12 +2,12 @@
 
 ## Overview
 
-The Ask Pulse chat can call **multiple tools** (Omni API, Chick-fil-A MCPs/APIs). **Gemini** is the coordination layer: it interprets the user’s message, decides which tool(s) to call, and returns a single, user-friendly reply.
+The Ask Gleam chat can call **multiple tools** (Omni API, Chick-fil-A MCPs/APIs). **Gemini** is the coordination layer: it interprets the user’s message, decides which tool(s) to call, and returns a single, user-friendly reply.
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────────────┐
 │  Pulse Frontend │────▶│  Our Backend     │────▶│  Gemini (Coordinator)       │
-│  (Ask Pulse)    │     │  POST /api/chat  │     │  - Understands intent       │
+│  (Ask Gleam)    │     │  POST /api/chat  │     │  - Understands intent       │
 └─────────────────┘     └──────────────────┘     │  - Chooses tool(s)          │
         ▲                         │              │  - Can call multiple tools   │
         │                         │              └──────────────┬──────────────┘
@@ -34,7 +34,7 @@ The Ask Pulse chat can call **multiple tools** (Omni API, Chick-fil-A MCPs/APIs)
 
 ## Flow
 
-1. **User** types in Ask Pulse → frontend sends `POST /api/chat` with `{ message }`.
+1. **User** types in Ask Gleam → frontend sends `POST /api/chat` with `{ message }`.
 2. **Backend** forwards the message (and optional conversation history) to **Gemini** with a list of **tool declarations** (names, descriptions, parameters).
 3. **Gemini** either:
    - **Responds with text** → backend returns that as the chat reply, or
@@ -78,4 +78,4 @@ New tools (e.g. more Chick-fil-A actions or other MCPs) are added by:
   Uses Gemini + tools; returns `{ reply: string }` (and optionally `conversationId` for future multi-turn).
 
 - **`POST /api/agentic/jobs`** (and poll/result/cancel)  
-  Still available for **direct** Omni-only use (e.g. other clients or debugging). The main Ask Pulse flow goes through `/api/chat` and Gemini.
+  Still available for **direct** Omni-only use (e.g. other clients or debugging). The main Ask Gleam flow goes through `/api/chat` and Gemini.

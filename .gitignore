@@ -1,3 +1,7 @@
 node_modules/
 .env
+.env.backup
+.env.partner
+.env copy
+env partner
 .data/

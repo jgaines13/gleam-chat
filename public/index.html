@@ -174,6 +174,27 @@
             display: flex;
         }
 
+        /* ——— Embed tab ——— */
+        #embed {
+            padding: 0;
+            min-height: 0;
+        }
+        .embed-placeholder {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+        .embed-frame {
+            flex: 1;
+            width: 100%;
+            min-height: 300px;
+            border: none;
+        }
+
         /* ——— Overview ——— */
         .overview-content {
             padding: 20px;
@@ -790,7 +811,8 @@
                 <div class="header-subtitle"><span id="headerBrand">—</span> · <span id="headerDate"></span> <a href="/api/logout" class="header-logout" title="Log out">Log out</a></div>
                 <div class="tabs">
                     <div class="tab active" data-tab="overview">Overview</div>
-                    <div class="tab" data-tab="ask-pulse">Ask Pulse</div>
+                    <div class="tab" data-tab="ask-pulse">Ask Gleam</div>
+                    <div class="tab" data-tab="embed">Embed</div>
                 </div>
             </div>
 
@@ -833,7 +855,7 @@
                             <span class="alert-title">Speed of Delivery Alert</span>
                         </div>
                         <div class="alert-body">6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.</div>
-                        <div class="ask-pulse-cta" onclick="switchToAskPulse('Can you give me more details on the speed of delivery alert? 6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.')">Ask Pulse for details →</div>
+                        <div class="ask-pulse-cta" onclick="switchToAskPulse('Can you give me more details on the speed of delivery alert? 6 DCs saw an increase in time to ship, with Port Authority of NY increasing by 12%.')">Ask Gleam for details →</div>
                     </div>
 
                     <div class="alert-card success">
@@ -844,6 +866,12 @@
                         <div class="alert-body">New member signups jumped up 12% since campaign kicked off.</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Embed tab (signed Omni embed URL in iframe) -->
+            <div class="tab-content" id="embed">
+                <div class="embed-placeholder" id="embedPlaceholder">Loading embed…</div>
+                <iframe id="embedFrame" class="embed-frame" title="Omni embed" style="display: none;"></iframe>
             </div>
 
             <!-- Ask Pulse tab -->
@@ -857,7 +885,7 @@
                                 <defs><linearGradient id="gleam_star_empty" x1="11.5" y1="0.5" x2="11.5" y2="23.5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE074"/><stop offset="1" stop-color="#FFC93F"/></linearGradient></defs>
                             </svg>
                         </div>
-                        <div class="ask-pulse-title">Ask Pulse</div>
+                        <div class="ask-pulse-title">Ask Gleam</div>
                         <div class="ask-pulse-subtitle">Ask anything about your locations, performance, and operations.</div>
                         <div class="suggested-questions">
                             <button class="suggested-btn" onclick="sendMessage('Seasonality trends in orders?')">Seasonality trends in orders?</button>
@@ -878,7 +906,7 @@
                             <a class="debug-toggle" id="calendarConnect" href="/auth/google" target="_blank" rel="noopener">Connect</a>
                         </div>
                         <div class="integration-hint">
-                            Connect a test Google account to let Ask Pulse list and create calendar events. To schedule a shift, say who it’s for (e.g. &quot;Schedule a shift for Ben this Saturday 12–5&quot;) and events will be titled &quot;Shift for [name]&quot;.
+                            Connect a test Google account to let Ask Gleam list and create calendar events. To schedule a shift, say who it’s for (e.g. &quot;Schedule a shift for Ben this Saturday 12–5&quot;) and events will be titled &quot;Shift for [name]&quot;.
                         </div>
                     </div>
                     <div class="debug-controls">
@@ -1190,8 +1218,35 @@
                     loadSpeedOfServiceKpi();
                     loadAovKpi();
                 }
+                if (target === 'embed') {
+                    loadEmbedUrl();
+                }
             });
         });
+
+        function loadEmbedUrl() {
+            const placeholder = document.getElementById('embedPlaceholder');
+            const frame = document.getElementById('embedFrame');
+            if (!placeholder || !frame) return;
+            placeholder.style.display = 'flex';
+            placeholder.textContent = 'Loading embed…';
+            frame.style.display = 'none';
+            frame.src = '';
+            fetch('/api/embed-url', { credentials: 'include' })
+                .then(res => res.json().then(data => ({ ok: res.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok && data.url) {
+                        frame.src = data.url;
+                        frame.style.display = 'block';
+                        placeholder.style.display = 'none';
+                    } else {
+                        placeholder.textContent = data.error || 'Embed not available. Try logging out and back in.';
+                    }
+                })
+                .catch(() => {
+                    placeholder.textContent = 'Could not load embed.';
+                });
+        }
 
         function switchToAskPulse(message) {
             document.querySelector('.tab[data-tab="ask-pulse"]').click();
