@@ -216,26 +216,36 @@ app.get('/api/embed-url', async (req, res) => {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: 'Not logged in' });
   }
-  // Generate a fresh signed URL on each request; Omni's embed URL is one-time-use, so reusing causes 403.
-  const embedResult = await generateOmniEmbedUrl({
-    externalId: req.session.userId,
-    name: req.session.displayName || req.session.userId,
-    userAttributes: { brand: req.session.displayName || req.session.userId, is_internal: 'false' },
-  });
-  if (!embedResult.ok || !embedResult.url) {
-    console.warn('[embed-url] generate failed for', req.session.userId, embedResult.error);
-    return res.status(502).json({ error: embedResult.error || 'Could not generate embed URL', url: null });
+  try {
+    // Generate a fresh signed URL on each request; Omni's embed URL is one-time-use, so reusing causes 403.
+    const embedResult = await generateOmniEmbedUrl({
+      externalId: req.session.userId,
+      name: req.session.displayName || req.session.userId,
+      userAttributes: { brand: req.session.displayName || req.session.userId, is_internal: 'false' },
+    });
+
+    if (!embedResult.ok || !embedResult.url) {
+      console.warn('[embed-url] generate failed for', req.session.userId, embedResult.error);
+      return res.status(502).json({ error: embedResult.error || 'Could not generate embed URL', url: null });
+    }
+
+    let omniUserId = embedResult.omniUserId;
+    if (!omniUserId) omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
+    if (!omniUserId) {
+      await new Promise((r) => setTimeout(r, 800));
+      omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
+    }
+
+    req.session.omniUserId = omniUserId || req.session.omniUserId || null;
+    console.log('[embed-url] serving fresh URL for', req.session.userId);
+    res.set('Cache-Control', 'no-store');
+    res.json({ url: embedResult.url });
+  } catch (err) {
+    console.error('[embed-url] unexpected error:', err);
+    return res
+      .status(502)
+      .json({ error: err?.message || 'Could not generate embed URL', url: null });
   }
-  let omniUserId = embedResult.omniUserId;
-  if (!omniUserId) omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
-  if (!omniUserId) {
-    await new Promise((r) => setTimeout(r, 800));
-    omniUserId = await getEmbedUserIdByExternalId(req.session.userId);
-  }
-  req.session.omniUserId = omniUserId || req.session.omniUserId || null;
-  console.log('[embed-url] serving fresh URL for', req.session.userId);
-  res.set('Cache-Control', 'no-store');
-  res.json({ url: embedResult.url });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -465,7 +475,7 @@ function requireConfig(req, res, next) {
 }
 
 // Paths are relative to OMNI_BASE_URL (e.g. https://partners.omniapp.co/api)
-const OMNI_API_PREFIX = '/v1/agentic';
+const OMNI_API_PREFIX = '/v1/ai';
 const OMNI_QUERY_PREFIX = '/v1/query';
 
 /** Build Omni API headers; when mcpUserId is set, add RLS headers for embed user. */
@@ -581,8 +591,43 @@ async function omniFetch(pathname, options = {}) {
   return body;
 }
 
+/** GET binary (e.g. PNG) from Omni AI jobs API. */
+async function omniFetchBinary(pathname, options = {}) {
+  const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  let url = `${OMNI_BASE_URL}${OMNI_API_PREFIX}${path}`;
+  const uid = options.mcpUserId != null ? String(options.mcpUserId).trim() : '';
+  if (uid !== '') {
+    const sep = url.includes('?') ? '&' : '?';
+    url += sep + 'userId=' + encodeURIComponent(uid);
+  }
+  const base = omniHeaders(options);
+  const headers = {
+    ...base,
+    Accept: options.accept || 'image/png,image/*;q=0.9,*/*;q=0.5',
+  };
+  delete headers['Content-Type'];
+  const res = await fetch(url, { method: 'GET', ...options, headers });
+  if (!res.ok) {
+    const text = await res.text();
+    let body;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = null;
+    }
+    const msg = body?.message || body?.error || (typeof body?.detail === 'string' ? body.detail : null) || text || res.statusText;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const contentType = res.headers.get('content-type') || 'image/png';
+  return { buffer, contentType };
+}
+
 // Submit a job
-app.post('/api/agentic/jobs', requireConfig, async (req, res) => {
+app.post('/api/v1/ai/jobs', requireConfig, async (req, res) => {
   try {
     const { prompt, conversationId, topicName } = req.body;
     if (!prompt || typeof prompt !== 'string') {
@@ -601,7 +646,7 @@ app.post('/api/agentic/jobs', requireConfig, async (req, res) => {
     }
     if (payload.topicName == null) delete payload.topicName;
     if (mcpUserId) payload.externalId = mcpUserId;
-    if (mcpUserId) console.log('[agentic] POST /jobs with user context:', mcpUserId);
+    if (mcpUserId) console.log('[ai jobs] POST with user context:', mcpUserId);
     const result = await omniFetch('/jobs', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -621,7 +666,7 @@ app.post('/api/agentic/jobs', requireConfig, async (req, res) => {
 });
 
 // Poll job status
-app.get('/api/agentic/jobs/:jobId', requireConfig, async (req, res) => {
+app.get('/api/v1/ai/jobs/:jobId', requireConfig, async (req, res) => {
   try {
     const { jobId } = req.params;
     const mcpUserId = getOmniUserId(req.session);
@@ -637,7 +682,7 @@ app.get('/api/agentic/jobs/:jobId', requireConfig, async (req, res) => {
 });
 
 // Get full result (COMPLETE jobs only)
-app.get('/api/agentic/jobs/:jobId/result', requireConfig, async (req, res) => {
+app.get('/api/v1/ai/jobs/:jobId/result', requireConfig, async (req, res) => {
   try {
     const { jobId } = req.params;
     const mcpUserId = getOmniUserId(req.session);
@@ -652,8 +697,26 @@ app.get('/api/agentic/jobs/:jobId/result', requireConfig, async (req, res) => {
   }
 });
 
+// Visualization PNG for a completed job
+app.get('/api/v1/ai/jobs/:jobId/vis', requireConfig, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const mcpUserId = getOmniUserId(req.session);
+    const { buffer, contentType } = await omniFetchBinary(`/jobs/${encodeURIComponent(jobId)}/vis`, { mcpUserId });
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=120');
+    res.send(buffer);
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({
+      error: err.message || 'Failed to load visualization',
+      details: err.body,
+    });
+  }
+});
+
 // Cancel job
-app.post('/api/agentic/jobs/:jobId/cancel', requireConfig, async (req, res) => {
+app.post('/api/v1/ai/jobs/:jobId/cancel', requireConfig, async (req, res) => {
   try {
     const { jobId } = req.params;
     const mcpUserId = getOmniUserId(req.session);
@@ -716,6 +779,7 @@ async function runOmniAnalysis(prompt, opts = {}) {
       return {
         resultSummary: result.resultSummary || 'Analysis complete.',
         querySpec: firstQuery,
+        jobId,
       };
     }
     if (status.state === 'FAILED') {
@@ -2182,7 +2246,11 @@ app.post('/api/chat', async (req, res) => {
       };
       const result = await runOmniAnalysis(message.trim(), { mcpUserId, onEvent });
       const reply = result?.resultSummary || 'Analysis complete.';
-      return res.json({ reply, conversationId: null });
+      return res.json({
+        reply,
+        conversationId: null,
+        ...(result?.jobId ? { omniJobId: result.jobId } : {}),
+      });
     }
 
     // Gemini coordinator path
@@ -2206,9 +2274,16 @@ app.post('/api/chat', async (req, res) => {
       if (debug) trace.push({ ts: new Date().toISOString(), ...evt });
     };
     const mcpUserId = getOmniUserId(req.session);
-    const { reply, history: newHistory } = await enqueueChat(() => coord.chat(message.trim(), history, { onEvent, mcpUserId }));
+    const { reply, history: newHistory, omniJobId } = await enqueueChat(() =>
+      coord.chat(message.trim(), history, { onEvent, mcpUserId }),
+    );
     saveHistory(conversationId, newHistory);
-    res.json({ reply, conversationId, debug: debug ? trace : undefined });
+    res.json({
+      reply,
+      conversationId,
+      ...(omniJobId ? { omniJobId } : {}),
+      debug: debug ? trace : undefined,
+    });
   } catch (err) {
     console.error('Chat error:', err);
     const msg = err?.message || 'Chat failed';

@@ -75,7 +75,7 @@ New tools (e.g. more Chick-fil-A actions or other MCPs) are added by:
 
 - **`POST /api/chat`**  
   Body: `{ message: string, conversationId?: string }`  
-  Uses Gemini + tools; returns `{ reply: string }` (and optionally `conversationId` for future multi-turn).
+  Uses Gemini + tools; returns `{ reply: string }` (and optionally `conversationId` for multi-turn). When the turn included Omni analysis, the response may include **`omniJobId`** so the client can load a chart image from **`GET /api/v1/ai/jobs/:jobId/vis`**.
 
-- **`POST /api/agentic/jobs`** (and poll/result/cancel)  
+- **`POST /api/v1/ai/jobs`** (and poll/result/cancel, plus **`GET /api/v1/ai/jobs/:jobId/vis`** for a PNG visualization)  
   Still available for **direct** Omni-only use (e.g. other clients or debugging). The main Ask Gleam flow goes through `/api/chat` and Gemini.

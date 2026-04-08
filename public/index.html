@@ -510,7 +510,7 @@
         }
 
         .message.user {
-            flex-direction: row-reverse;
+            justify-content: flex-end;
         }
 
         .message-avatar {
@@ -522,16 +522,6 @@
             align-items: center;
             justify-content: center;
             font-size: 14px;
-        }
-
-        .message.user .message-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .message.user .message-avatar {
-            background: #e8e0ec;
-            overflow: hidden;
         }
 
         .message.assistant .message-avatar {
@@ -621,6 +611,25 @@
         }
         .message.assistant .message-content h1:first-child, .message.assistant .message-content h2:first-child, .message.assistant .message-content h3:first-child {
             margin-top: 0;
+        }
+
+        .message.message-vis .message-content-vis {
+            max-width: min(100%, 420px);
+        }
+        .message.message-vis .vis-caption {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+            letter-spacing: 0.02em;
+        }
+        .message.message-vis .chat-vis-img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: #fafafa;
         }
 
         .typing-indicator {
@@ -1541,16 +1550,6 @@
             askPulseEmpty.style.display = 'none';
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
-            const avatar = document.createElement('div');
-            avatar.className = 'message-avatar';
-            if (isUser) {
-                const img = document.createElement('img');
-                img.src = userAvatarUrl;
-                img.alt = 'You';
-                avatar.appendChild(img);
-            } else {
-                avatar.innerHTML = getGleamStarSvg();
-            }
             const content = document.createElement('div');
             content.className = 'message-content';
             if (isUser) {
@@ -1558,11 +1557,71 @@
             } else {
                 content.innerHTML = markdownToHtml(text);
             }
-            messageDiv.appendChild(avatar);
+            if (!isUser) {
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.innerHTML = getGleamStarSvg();
+                messageDiv.appendChild(avatar);
+            }
             messageDiv.appendChild(content);
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
             return messageDiv;
+        }
+
+        /** Second assistant bubble only when /vis returns a decodable image; otherwise no-op. */
+        async function addAssistantVisFromJob(jobId) {
+            if (!jobId || typeof jobId !== 'string') return;
+            let res;
+            try {
+                res = await fetch(`/api/v1/ai/jobs/${encodeURIComponent(jobId)}/vis`, { credentials: 'include' });
+            } catch (_) {
+                return;
+            }
+            if (!res.ok) return;
+            const ct = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+            if (!ct.startsWith('image/')) return;
+            let blob;
+            try {
+                blob = await res.blob();
+            } catch (_) {
+                return;
+            }
+            if (!blob || blob.size === 0) return;
+
+            const objectUrl = URL.createObjectURL(blob);
+            const img = document.createElement('img');
+            img.className = 'chat-vis-img';
+            img.alt = 'Query visualization';
+            img.decoding = 'async';
+            try {
+                await new Promise((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject();
+                    img.src = objectUrl;
+                });
+            } catch (_) {
+                URL.revokeObjectURL(objectUrl);
+                return;
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant message-vis';
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.innerHTML = getGleamStarSvg();
+            const wrap = document.createElement('div');
+            wrap.className = 'message-content message-content-vis';
+            const caption = document.createElement('div');
+            caption.className = 'vis-caption';
+            caption.textContent = 'Visualization';
+            wrap.appendChild(caption);
+            wrap.appendChild(img);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(wrap);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            requestAnimationFrame(() => URL.revokeObjectURL(objectUrl));
         }
 
         let progressPollInterval = null;
@@ -1648,7 +1707,7 @@
         }
 
         async function submitJob(prompt) {
-            const response = await fetch('/api/agentic/jobs', {
+            const response = await fetch('/api/v1/ai/jobs', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -1667,7 +1726,7 @@
         }
 
         async function pollJobStatus(jobId) {
-            const response = await fetch(`/api/agentic/jobs/${jobId}`, { credentials: 'include' });
+            const response = await fetch(`/api/v1/ai/jobs/${jobId}`, { credentials: 'include' });
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error || 'Failed to get job status');
@@ -1676,7 +1735,7 @@
         }
 
         async function getJobResult(jobId) {
-            const response = await fetch(`/api/agentic/jobs/${jobId}/result`, { credentials: 'include' });
+            const response = await fetch(`/api/v1/ai/jobs/${jobId}/result`, { credentials: 'include' });
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error || 'Failed to get result');
@@ -1703,12 +1762,13 @@
                 if (coord) {
                     removeTypingIndicator();
                     addMessage(coord.reply, false);
+                    if (coord.omniJobId) await addAssistantVisFromJob(coord.omniJobId);
                     if (coord.conversationId) geminiConversationId = coord.conversationId;
-                    addDebug({ type: 'client_done', path: 'coordinator' });
+                    addDebug({ type: 'client_done', path: 'coordinator', omniJobId: coord.omniJobId || null });
                     return;
                 }
 
-                // Fallback: direct Omni agentic job (no Gemini)
+                // Fallback: direct Omni AI job (no Gemini)
                 addDebug({ type: 'fallback_direct_omni' });
                 const { jobId, conversationId: newConvId } = await submitJob(message);
                 if (newConvId) omniConversationId = newConvId;
@@ -1736,6 +1796,7 @@
                 if (state === 'COMPLETE') {
                     const result = await getJobResult(jobId);
                     addMessage(result.resultSummary || 'Analysis complete.', false);
+                    await addAssistantVisFromJob(jobId);
                     // Include Omni query spec in debug (if present)
                     const actions = Array.isArray(result.actions) ? result.actions : [];
                     const firstQuery = actions.find((a) => a?.result?.query)?.result?.query || null;
